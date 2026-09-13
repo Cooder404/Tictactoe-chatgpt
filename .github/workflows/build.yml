@@ -1,17 +1,909 @@
-name: Build APK
-on: [workflow_dispatch]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
-      - run: gradle assembleDebug
-      - uses: actions/upload-artifact@v4
-        with:
-          name: TicTacToe-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+package com.example.tictactoe;
+
+import android.app.Activity;
+import android.os.Bundle;
+import android.graphics.*;
+import android.graphics.drawable.ColorDrawable;
+import android.view.*;
+import android.content.Context;
+import java.util.Random;
+
+public class MainActivity extends Activity {
+
+    GameView game;
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+
+        game = new GameView(this);
+        setContentView(game);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (game != null) game.pauseGame();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (game != null) game.resumeGame();
+    }
+
+    // =========================================================
+    // GAME VIEW
+    // =========================================================
+
+    public static class GameView extends View {
+
+        Paint p = new Paint();
+        Paint text = new Paint();
+
+        Random random = new Random();
+
+        // 9-pixel-style virtual resolution
+        final int VIRTUAL_W = 160;
+        final int VIRTUAL_H = 90;
+
+        float scale;
+        float offsetX, offsetY;
+
+        boolean menu = true;
+        boolean gameRunning = false;
+
+        Player player1;
+        Player player2;
+
+        long lastTime;
+
+        // -----------------------------------------------------
+        // Constructor
+        // -----------------------------------------------------
+
+        public GameView(Context context) {
+            super(context);
+
+            p.setAntiAlias(false);
+            text.setAntiAlias(false);
+
+            setFocusable(true);
+
+            player1 = new Player(
+                    35, 60,
+                    Color.rgb(50, 150, 255),
+                    "P1"
+            );
+
+            player2 = new Player(
+                    125, 60,
+                    Color.rgb(255, 70, 70),
+                    "P2"
+            );
+        }
+
+        // -----------------------------------------------------
+        // GAME START
+        // -----------------------------------------------------
+
+        void newGame() {
+
+            player1.reset(35, 60);
+            player2.reset(125, 60);
+
+            menu = false;
+            gameRunning = true;
+
+            lastTime = System.currentTimeMillis();
+
+            invalidate();
+        }
+
+        // -----------------------------------------------------
+        // DRAW
+        // -----------------------------------------------------
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+
+            scale = Math.min(
+                    getWidth() / (float) VIRTUAL_W,
+                    getHeight() / (float) VIRTUAL_H
+            );
+
+            offsetX = (getWidth() - VIRTUAL_W * scale) / 2f;
+            offsetY = (getHeight() - VIRTUAL_H * scale) / 2f;
+
+            canvas.save();
+
+            canvas.translate(offsetX, offsetY);
+            canvas.scale(scale, scale);
+
+            if (menu) {
+                drawMenu(canvas);
+            } else {
+                drawWorld(canvas);
+
+                if (gameRunning) {
+                    updateGame();
+                }
+            }
+
+            canvas.restore();
+
+            if (gameRunning) {
+                postInvalidateDelayed(16);
+            }
+        }
+
+        // -----------------------------------------------------
+        // MENU
+        // -----------------------------------------------------
+
+        void drawMenu(Canvas c) {
+
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(Color.rgb(20, 25, 35));
+            c.drawRect(0, 0, VIRTUAL_W, VIRTUAL_H, p);
+
+            // Pixel title shadow
+            text.setTextAlign(Paint.Align.CENTER);
+            text.setTypeface(Typeface.DEFAULT_BOLD);
+            text.setTextSize(16);
+            text.setColor(Color.BLACK);
+
+            c.drawText(
+                    "PIXEL FIGHTER",
+                    VIRTUAL_W / 2 + 2,
+                    25 + 2,
+                    text
+            );
+
+            text.setColor(Color.WHITE);
+
+            c.drawText(
+                    "PIXEL FIGHTER",
+                    VIRTUAL_W / 2,
+                    25,
+                    text
+            );
+
+            // Start button
+            drawButton(
+                    c,
+                    45, 38,
+                    70, 18,
+                    "2 PLAYER"
+            );
+
+            text.setTextSize(6);
+            text.setColor(Color.LTGRAY);
+
+            c.drawText(
+                    "SPEAR 5 DMG",
+                    80,
+                    67,
+                    text
+            );
+
+            c.drawText(
+                    "AXE 3 DMG",
+                    80,
+                    74,
+                    text
+            );
+
+            c.drawText(
+                    "NO BOTS",
+                    80,
+                    81,
+                    text
+            );
+        }
+
+        void drawButton(
+                Canvas c,
+                float x,
+                float y,
+                float w,
+                float h,
+                String label
+        ) {
+
+            p.setColor(Color.rgb(60, 60, 70));
+            c.drawRect(x, y, x + w, y + h, p);
+
+            p.setColor(Color.WHITE);
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(2);
+            c.drawRect(x, y, x + w, y + h, p);
+            p.setStyle(Paint.Style.FILL);
+
+            text.setTextAlign(Paint.Align.CENTER);
+            text.setTextSize(8);
+            text.setColor(Color.WHITE);
+            text.setTypeface(Typeface.DEFAULT_BOLD);
+
+            c.drawText(
+                    label,
+                    x + w / 2,
+                    y + h / 2 + 3,
+                    text
+            );
+        }
+
+        // -----------------------------------------------------
+        // WORLD
+        // -----------------------------------------------------
+
+        void drawWorld(Canvas c) {
+
+            // Sky
+            p.setColor(Color.rgb(100, 180, 235));
+            c.drawRect(0, 0, VIRTUAL_W, 62, p);
+
+            // Far mountains
+            p.setColor(Color.rgb(80, 120, 130));
+
+            Path mountain = new Path();
+
+            mountain.moveTo(0, 55);
+            mountain.lineTo(25, 35);
+            mountain.lineTo(45, 53);
+            mountain.lineTo(70, 30);
+            mountain.lineTo(95, 55);
+            mountain.lineTo(120, 37);
+            mountain.lineTo(160, 55);
+            mountain.lineTo(160, 62);
+            mountain.lineTo(0, 62);
+
+            mountain.close();
+
+            c.drawPath(mountain, p);
+
+            // Ground
+            p.setColor(Color.rgb(75, 145, 65));
+            c.drawRect(0, 62, VIRTUAL_W, 90, p);
+
+            // Ground shadow
+            p.setColor(Color.rgb(50, 105, 45));
+            c.drawRect(0, 65, VIRTUAL_W, 90, p);
+
+            // Platform
+            p.setColor(Color.rgb(115, 75, 45));
+            c.drawRect(15, 59, 145, 70, p);
+
+            p.setColor(Color.rgb(155, 105, 60));
+            c.drawRect(15, 59, 145, 62, p);
+
+            // Fake 3D platform side
+            p.setColor(Color.rgb(70, 45, 30));
+
+            Path side = new Path();
+
+            side.moveTo(15, 70);
+            side.lineTo(145, 70);
+            side.lineTo(140, 76);
+            side.lineTo(20, 76);
+            side.close();
+
+            c.drawPath(side, p);
+
+            // Players
+            player1.draw(c);
+            player2.draw(c);
+
+            // Health bars
+            drawHealthBar(c, player1, 8, 6);
+            drawHealthBar(c, player2, 92, 6);
+
+            // Controls
+            drawControls(c);
+        }
+
+        // -----------------------------------------------------
+        // HEALTH
+        // -----------------------------------------------------
+
+        void drawHealthBar(
+                Canvas c,
+                Player player,
+                float x,
+                float y
+        ) {
+
+            float width = 60;
+
+            p.setColor(Color.BLACK);
+            c.drawRect(x - 1, y - 1, x + width + 1, y + 7, p);
+
+            p.setColor(Color.DKGRAY);
+            c.drawRect(x, y, x + width, y + 6, p);
+
+            float healthWidth =
+                    width * (player.health / 100f);
+
+            p.setColor(
+                    player.health > 40
+                            ? Color.rgb(50, 220, 70)
+                            : Color.rgb(230, 50, 50)
+            );
+
+            c.drawRect(
+                    x,
+                    y,
+                    x + healthWidth,
+                    y + 6,
+                    p
+            );
+
+            text.setTextAlign(TextPaintAlign());
+            text.setTextSize(5);
+            text.setColor(Color.WHITE);
+
+            c.drawText(
+                    player.name,
+                    x + 2,
+                    y + 5,
+                    text
+            );
+        }
+
+        Paint.Align TextPaintAlign() {
+            return Paint.Align.LEFT;
+        }
+
+        // -----------------------------------------------------
+        // CONTROLS
+        // -----------------------------------------------------
+
+        void drawControls(Canvas c) {
+
+            // P1 buttons
+            drawControl(c, 8, 76, 12, 10, "←");
+            drawControl(c, 22, 76, 12, 10, "→");
+            drawControl(c, 36, 76, 12, 10, "A");
+
+            // P1 skill
+            drawControl(c, 50, 76, 15, 10, "S1");
+
+            // P2 buttons
+            drawControl(c, 95, 76, 12, 10, "←");
+            drawControl(c, 109, 76, 12, 10, "→");
+            drawControl(c, 123, 76, 12, 10, "A");
+
+            // P2 skill
+            drawControl(c, 138, 76, 15, 10, "S1");
+        }
+
+        void drawControl(
+                Canvas c,
+                float x,
+                float y,
+                float w,
+                float h,
+                String label
+        ) {
+
+            p.setColor(Color.rgb(35, 35, 45));
+            c.drawRect(x, y, x + w, y + h, p);
+
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(1);
+            p.setColor(Color.WHITE);
+
+            c.drawRect(x, y, x + w, y + h, p);
+
+            p.setStyle(Paint.Style.FILL);
+
+            text.setTextAlign(Paint.Align.CENTER);
+            text.setTextSize(5);
+            text.setColor(Color.WHITE);
+
+            c.drawText(
+                    label,
+                    x + w / 2,
+                    y + h / 2 + 2,
+                    text
+            );
+        }
+
+        // -----------------------------------------------------
+        // UPDATE
+        // -----------------------------------------------------
+
+        void updateGame() {
+
+            long now = System.currentTimeMillis();
+
+            float dt =
+                    Math.min(
+                            (now - lastTime) / 1000f,
+                            0.05f
+                    );
+
+            lastTime = now;
+
+            player1.update(dt);
+            player2.update(dt);
+
+            checkCombat();
+
+            if (player1.health <= 0 ||
+                    player2.health <= 0) {
+
+                gameRunning = false;
+            }
+        }
+
+        // -----------------------------------------------------
+        // COMBAT
+        // -----------------------------------------------------
+
+        void checkCombat() {
+
+            if (player1.attackTimer > 0) {
+
+                float distance =
+                        Math.abs(
+                                player1.x -
+                                player2.x
+                        );
+
+                float reach =
+                        player1.weapon == Weapon.SPEAR
+                                ? 24
+                                : 13;
+
+                if (distance <= reach &&
+                        !player2.hitCooldown) {
+
+                    player2.takeDamage(
+                            player1.weapon == Weapon.SPEAR
+                                    ? 5
+                                    : 3
+                    );
+                }
+            }
+
+            if (player2.attackTimer > 0) {
+
+                float distance =
+                        Math.abs(
+                                player2.x -
+                                player1.x
+                        );
+
+                float reach =
+                        player2.weapon == Weapon.SPEAR
+                                ? 24
+                                : 13;
+
+                if (distance <= reach &&
+                        !player1.hitCooldown) {
+
+                    player1.takeDamage(
+                            player2.weapon == Weapon.SPEAR
+                                    ? 5
+                                    : 3
+                    );
+                }
+            }
+        }
+
+        // -----------------------------------------------------
+        // TOUCH
+        // -----------------------------------------------------
+
+        @Override
+        public boolean onTouchEvent(
+                android.view.MotionEvent event
+        ) {
+
+            if (event.getAction() !=
+                    MotionEvent.ACTION_DOWN) {
+
+                return true;
+            }
+
+            float x =
+                    (event.getX() - offsetX) / scale;
+
+            float y =
+                    (event.getY() - offsetY) / scale;
+
+            if (menu) {
+
+                if (x >= 45 &&
+                        x <= 115 &&
+                        y >= 38 &&
+                        y <= 56) {
+
+                    newGame();
+                }
+
+                return true;
+            }
+
+            // P1
+            if (inside(x, y, 8, 76, 12, 10)) {
+                player1.moveLeft();
+            }
+
+            else if (inside(x, y, 22, 76, 12, 10)) {
+                player1.moveRight();
+            }
+
+            else if (inside(x, y, 36, 76, 12, 10)) {
+                player1.attack();
+            }
+
+            else if (inside(x, y, 50, 76, 15, 10)) {
+                player1.skill();
+            }
+
+            // P2
+            else if (inside(x, y, 95, 76, 12, 10)) {
+                player2.moveLeft();
+            }
+
+            else if (inside(x, y, 109, 76, 12, 10)) {
+                player2.moveRight();
+            }
+
+            else if (inside(x, y, 123, 76, 12, 10)) {
+                player2.attack();
+            }
+
+            else if (inside(x, y, 138, 76, 15, 10)) {
+                player2.skill();
+            }
+
+            invalidate();
+
+            return true;
+        }
+
+        boolean inside(
+                float px,
+                float py,
+                float x,
+                float y,
+                float w,
+                float h
+        ) {
+
+            return px >= x &&
+                    px <= x + w &&
+                    py >= y &&
+                    py <= y + h;
+        }
+
+        void pauseGame() {
+            gameRunning = false;
+        }
+
+        void resumeGame() {
+            if (!menu &&
+                    player1.health > 0 &&
+                    player2.health > 0) {
+
+                gameRunning = true;
+                lastTime =
+                        System.currentTimeMillis();
+
+                invalidate();
+            }
+        }
+
+        // =====================================================
+        // PLAYER
+        // =====================================================
+
+        class Player {
+
+            float x;
+            float y;
+
+            float velocityX;
+
+            int color;
+
+            String name;
+
+            int health = 100;
+
+            boolean hitCooldown = false;
+
+            float attackTimer = 0;
+
+            float skillCooldown = 0;
+
+            Weapon weapon = Weapon.SPEAR;
+
+            Player(
+                    float x,
+                    float y,
+                    int color,
+                    String name
+            ) {
+
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.name = name;
+            }
+
+            void reset(float x, float y) {
+
+                this.x = x;
+                this.y = y;
+
+                health = 100;
+
+                velocityX = 0;
+
+                attackTimer = 0;
+                skillCooldown = 0;
+
+                hitCooldown = false;
+
+                weapon = Weapon.SPEAR;
+            }
+
+            void update(float dt) {
+
+                x += velocityX * dt;
+
+                velocityX *= 0.80f;
+
+                if (x < 20)
+                    x = 20;
+
+                if (x > 140)
+                    x = 140;
+
+                if (attackTimer > 0)
+                    attackTimer -= dt;
+
+                if (skillCooldown > 0)
+                    skillCooldown -= dt;
+
+                if (hitCooldown) {
+                    // short damage immunity
+                    hitCooldown = false;
+                }
+            }
+
+            void moveLeft() {
+                velocityX = -45;
+            }
+
+            void moveRight() {
+                velocityX = 45;
+            }
+
+            void attack() {
+                attackTimer = 0.18f;
+            }
+
+            void skill() {
+
+                if (skillCooldown > 0)
+                    return;
+
+                skillCooldown = 1.0f;
+
+                if (weapon == Weapon.SPEAR) {
+
+                    // Spear Skill 1:
+                    // temporary long reach
+                    attackTimer = 0.45f;
+                }
+
+                else if (weapon == Weapon.AXE) {
+
+                    // Axe Skill 1:
+                    // throw attack
+                    attackTimer = 0.60f;
+                }
+
+                else {
+
+                    // Ender Pearl:
+                    // teleport forward
+                    if (name.equals("P1")) {
+                        x += 30;
+                    } else {
+                        x -= 30;
+                    }
+
+                    x = Math.max(20, Math.min(140, x));
+                }
+            }
+
+            void takeDamage(int damage) {
+
+                if (hitCooldown)
+                    return;
+
+                health -= damage;
+
+                if (health < 0)
+                    health = 0;
+
+                hitCooldown = true;
+            }
+
+            void draw(Canvas c) {
+
+                // Shadow
+                p.setColor(Color.argb(
+                        100, 0, 0, 0
+                ));
+
+                c.drawRect(
+                        x - 7,
+                        67,
+                        x + 7,
+                        70,
+                        p
+                );
+
+                // Body
+                p.setColor(color);
+
+                c.drawRect(
+                        x - 6,
+                        y - 15,
+                        x + 6,
+                        y,
+                        p
+                );
+
+                // 3D side
+                p.setColor(darken(color));
+
+                c.drawRect(
+                        x + 6,
+                        y - 15,
+                        x + 9,
+                        y - 2,
+                        p
+                );
+
+                // Head
+                p.setColor(Color.rgb(
+                        240, 190, 140
+                ));
+
+                c.drawRect(
+                        x - 5,
+                        y - 24,
+                        x + 5,
+                        y - 15,
+                        p
+                );
+
+                // Hair
+                p.setColor(Color.rgb(
+                        45, 30, 25
+                ));
+
+                c.drawRect(
+                        x - 5,
+                        y - 24,
+                        x + 5,
+                        y - 21,
+                        p
+                );
+
+                // Weapon
+                drawWeapon(c);
+            }
+
+            void drawWeapon(Canvas c) {
+
+                boolean facingRight =
+                        name.equals("P1");
+
+                float dir =
+                        facingRight ? 1 : -1;
+
+                if (weapon == Weapon.SPEAR) {
+
+                    p.setColor(Color.LTGRAY);
+
+                    c.drawRect(
+                            x + dir * 6,
+                            y - 11,
+                            x + dir * 20,
+                            y - 9,
+                            p
+                    );
+
+                    p.setColor(Color.WHITE);
+
+                    Path tip = new Path();
+
+                    tip.moveTo(
+                            x + dir * 25,
+                            y - 10
+                    );
+
+                    tip.lineTo(
+                            x + dir * 19,
+                            y - 14
+                    );
+
+                    tip.lineTo(
+                            x + dir * 19,
+                            y - 6
+                    );
+
+                    tip.close();
+
+                    c.drawPath(tip, p);
+                }
+
+                else if (weapon == Weapon.AXE) {
+
+                    p.setColor(Color.rgb(
+                            100, 60, 30
+                    ));
+
+                    c.drawRect(
+                            x + dir * 6,
+                            y - 18,
+                            x + dir * 8,
+                            y - 5,
+                            p
+                    );
+
+                    p.setColor(Color.LTGRAY);
+
+                    c.drawRect(
+                            x + dir * 8,
+                            y - 18,
+                            x + dir * 15,
+                            y - 12,
+                            p
+                    );
+                }
+
+                else {
+
+                    p.setColor(Color.rgb(
+                            120, 30, 190
+                    ));
+
+                    c.drawCircle(
+                            x + dir * 10,
+                            y - 10,
+                            4,
+                            p
+                    );
+                }
+            }
+
+            int darken(int color) {
+
+                int r = Color.red(color) * 65 / 100;
+                int g = Color.green(color) * 65 / 100;
+                int b = Color.blue(color) * 65 / 100;
+
+                return Color.rgb(r, g, b);
+            }
+        }
+
+        enum Weapon {
+            SPEAR,
+            AXE,
+            ENDER_PEARL
+        }
+    }
+}
