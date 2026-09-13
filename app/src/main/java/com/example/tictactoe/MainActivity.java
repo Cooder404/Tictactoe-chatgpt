@@ -8,113 +8,231 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.*;
 
-public class MainActivity extends Activity {
-    Button[] cells = new Button[9];
-    String[] board = new String[9];
-    TextView status;
-    boolean gameOver = false;
-    final int[][] wins = {{0,1,2},{3,4,5},{6,7,8},{0,3,6},{1,4,7},{2,5,8},{0,4,8},{2,4,6}};
+import java.util.Random;
 
-    @Override public void onCreate(Bundle b) {
+public class MainActivity extends Activity {
+
+    GridLayout grid;
+    TextView status;
+    Button[] blocks = new Button[64];
+
+    boolean[] mines = new boolean[64];
+    boolean[] revealed = new boolean[64];
+
+    int health = 3;
+    int revealedCount = 0;
+
+    Random random = new Random();
+
+    @Override
+    public void onCreate(Bundle b) {
         super.onCreate(b);
-        resetBoard();
+        startGame();
+    }
+
+    void startGame() {
+        health = 3;
+        revealedCount = 0;
+
+        for (int i = 0; i < 64; i++) {
+            mines[i] = false;
+            revealed[i] = false;
+        }
+
+        // Place 10 hidden mines
+        int placed = 0;
+        while (placed < 10) {
+            int p = random.nextInt(64);
+
+            if (!mines[p]) {
+                mines[p] = true;
+                placed++;
+            }
+        }
+
         buildUI();
     }
 
     void buildUI() {
+
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setGravity(Gravity.CENTER_HORIZONTAL);
-        page.setPadding(28, 28, 28, 28);
-        page.setBackgroundColor(Color.rgb(112,197,245));
+        page.setPadding(12, 20, 12, 12);
+        page.setBackgroundColor(Color.rgb(90, 170, 75));
 
         TextView title = new TextView(this);
-        title.setText("Tic Tac Toe");
-        title.setTextSize(38);
+        title.setText("⛏️ MineCrafty Sweeper");
+        title.setTextSize(28);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        title.setTextColor(Color.BLACK);
+        title.setTextColor(Color.WHITE);
         title.setGravity(Gravity.CENTER);
-        page.addView(title, new LinearLayout.LayoutParams(-1, 80));
+
+        page.addView(title,
+                new LinearLayout.LayoutParams(-1, 65));
 
         status = new TextView(this);
-        status.setText("Your turn — X");
-        status.setTextSize(22);
-        status.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        status.setText("❤️❤️❤️   Find the mines!");
+        status.setTextSize(19);
+        status.setTextColor(Color.WHITE);
         status.setGravity(Gravity.CENTER);
-        page.addView(status, new LinearLayout.LayoutParams(-1, 65));
 
-        GridLayout grid = new GridLayout(this);
-        grid.setColumnCount(3);
-        grid.setRowCount(3);
-        grid.setUseDefaultMargins(false);
+        page.addView(status,
+                new LinearLayout.LayoutParams(-1, 55));
 
-        for (int i=0;i<9;i++) {
-            final int index=i;
-            Button btn=new Button(this);
-            cells[i]=btn;
-            btn.setTextSize(42);
-            btn.setTextColor(Color.rgb(35,52,68));
-            btn.setBackgroundColor(Color.rgb(238,244,255));
-            btn.setOnClickListener(v -> playerMove(index));
-            GridLayout.LayoutParams lp=new GridLayout.LayoutParams();
-            lp.width=0; lp.height=0;
-            lp.columnSpec=GridLayout.spec(i%3,1f);
-            lp.rowSpec=GridLayout.spec(i/3,1f);
-            lp.setMargins(5,5,5,5);
-            grid.addView(btn,lp);
+        grid = new GridLayout(this);
+        grid.setColumnCount(8);
+        grid.setRowCount(8);
+
+        int screenWidth =
+                getResources().getDisplayMetrics().widthPixels;
+
+        int size = Math.min(screenWidth - 30, 600);
+
+        for (int i = 0; i < 64; i++) {
+
+            final int index = i;
+
+            Button block = new Button(this);
+
+            blocks[i] = block;
+
+            block.setText("?");
+            block.setTextSize(15);
+            block.setTextColor(Color.WHITE);
+            block.setBackgroundColor(Color.rgb(110, 75, 45));
+
+            GridLayout.LayoutParams lp =
+                    new GridLayout.LayoutParams();
+
+            lp.width = size / 8;
+            lp.height = size / 8;
+
+            lp.setMargins(2, 2, 2, 2);
+
+            grid.addView(block, lp);
+
+            block.setOnClickListener(v -> mineBlock(index));
         }
 
-        int sizeDp=(int)(Math.min(getResources().getDisplayMetrics().widthPixels*0.82f, 450));
-        page.addView(grid,new LinearLayout.LayoutParams(sizeDp,sizeDp));
+        page.addView(grid);
 
-        Button reset=new Button(this);
-        reset.setText("New Game");
-        reset.setTextSize(19);
-        reset.setOnClickListener(v -> { resetBoard(); render(); });
-        LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-2,70);
-        rp.topMargin=22;
-        page.addView(reset,rp);
+        Button reset = new Button(this);
+        reset.setText("🌎 New World");
+        reset.setTextSize(18);
+
+        reset.setOnClickListener(v -> startGame());
+
+        LinearLayout.LayoutParams rp =
+                new LinearLayout.LayoutParams(-2, 65);
+
+        rp.topMargin = 15;
+
+        page.addView(reset, rp);
 
         setContentView(page);
-        render();
     }
 
-    void resetBoard(){ for(int i=0;i<9;i++) board[i]=""; gameOver=false; }
+    void mineBlock(int index) {
 
-    void render(){ if(cells==null)return; for(int i=0;i<9;i++) cells[i].setText(board[i]); }
+        if (revealed[index]) return;
 
-    boolean won(String p){
-        for(int[] w:wins) if(board[w[0]].equals(p)&&board[w[1]].equals(p)&&board[w[2]].equals(p)) return true;
-        return false;
-    }
+        revealed[index] = true;
+        revealedCount++;
 
-    void playerMove(int i){
-        if(gameOver || !board[i].equals("")) return;
-        board[i]="X"; render();
-        if(won("X")){ end("You win! 🎉"); return; }
-        if(full()){ end("Draw! 🤝"); return; }
-        status.setText("Bot is thinking...");
-        new android.os.Handler().postDelayed(this::botMove,250);
-    }
+        Button block = blocks[index];
 
-    void botMove(){
-        if(gameOver)return;
-        int move=-1;
-        for(int i=0;i<9;i++) if(board[i].equals("")) {
-            board[i]="O"; if(won("O")){move=i;board[i]="";break;} board[i]="";
+        if (mines[index]) {
+
+            health--;
+
+            block.setText("💣");
+            block.setTextSize(22);
+            block.setBackgroundColor(Color.RED);
+
+            updateStatus();
+
+            if (health <= 0) {
+                gameOver();
+            }
+
+            return;
         }
-        if(move<0) for(int i=0;i<9;i++) if(board[i].equals("")) {
-            board[i]="X"; if(won("X")){move=i;board[i]="";break;} board[i]="";
+
+        // Safe block
+        int nearby = countNearbyMines(index);
+
+        if (nearby == 0) {
+            block.setText("🟩");
+        } else {
+            block.setText(String.valueOf(nearby));
         }
-        if(move<0 && board[4].equals("")) move=4;
-        if(move<0) for(int i:new int[]{0,2,6,8}) if(board[i].equals("")){move=i;break;}
-        if(move<0) for(int i=0;i<9;i++) if(board[i].equals("")){move=i;break;}
-        board[move]="O"; render();
-        if(won("O")){end("Bot wins! 🤖");return;}
-        if(full()){end("Draw! 🤝");return;}
-        status.setText("Your turn — X");
+
+        block.setTextColor(Color.BLACK);
+        block.setBackgroundColor(Color.rgb(170, 120, 70));
+
+        updateStatus();
+
+        if (revealedCount >= 54) {
+            status.setText("🏆 YOU CLEARED THE WORLD!");
+        }
     }
 
-    boolean full(){ for(String s:board) if(s.equals("")) return false; return true; }
-    void end(String s){gameOver=true;status.setText(s);}
-}
+    int countNearbyMines(int index) {
+
+        int count = 0;
+
+        int row = index / 8;
+        int col = index % 8;
+
+        for (int r = -1; r <= 1; r++) {
+            for (int c = -1; c <= 1; c++) {
+
+                if (r == 0 && c == 0) continue;
+
+                int nr = row + r;
+                int nc = col + c;
+
+                if (nr >= 0 && nr < 8 &&
+                    nc >= 0 && nc < 8) {
+
+                    int nearbyIndex = nr * 8 + nc;
+
+                    if (mines[nearbyIndex]) {
+                        count++;
+                    }
+                }
+            }
+        }
+
+        return count;
+    }
+
+    void updateStatus() {
+
+        String hearts = "";
+
+        for (int i = 0; i < health; i++) {
+            hearts += "❤️";
+        }
+
+        status.setText(
+                hearts + "   Blocks mined: " + revealedCount
+        );
+    }
+
+    void gameOver() {
+
+        status.setText("💥 GAME OVER!");
+
+        for (int i = 0; i < 64; i++) {
+
+            if (mines[i]) {
+                blocks[i].setText("💣");
+                blocks[i].setBackgroundColor(Color.RED);
+            }
+
+            blocks[i].setEnabled(false);
+        }
+    }
+            }
