@@ -2,11 +2,17 @@ package com.example.tictactoe;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.graphics.*;
-import android.view.*;
-import android.view.inputmethod.InputMethodManager;
-import android.content.*;
-import android.widget.EditText;
+import android.opengl.GLSurfaceView;
+import android.opengl.GLES20;
+import android.opengl.Matrix;
+import android.view.MotionEvent;
+import android.graphics.Color;
+import android.widget.Toast;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
+import java.util.ArrayList;
 import java.util.Random;
 
 public class MainActivity extends Activity {
@@ -14,887 +20,563 @@ public class MainActivity extends Activity {
     GameView game;
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    protected void onCreate(Bundle b) {
+        super.onCreate(b);
 
-        game = new GameView(this);
+        game = new GameView();
         setContentView(game);
     }
 
-    public static class GameView extends View {
+    class GameView extends GLSurfaceView {
 
-        Paint paint = new Paint();
+        Renderer3D renderer;
+
+        float joyX = 0;
+        float joyY = 0;
+        float lookX = 0;
+        float lookY = 0;
+
+        float playerX = 0;
+        float playerY = 2;
+        float playerZ = 5;
+
+        float yaw = 0;
+        float pitch = 0;
+
+        boolean jumping = false;
+
+        long lastTime;
+
+        ArrayList<Mob> mobs = new ArrayList<>();
         Random random = new Random();
 
-        final int AIR = 0;
-        final int GRASS = 1;
-        final int DIRT = 2;
-        final int STONE = 3;
+        GameView() {
+            super(MainActivity.this);
 
-        int worldWidth = 80;
-        int worldHeight = 35;
+            setEGLContextClientVersion(2);
 
-        int[][] world;
+            renderer = new Renderer3D();
+            setRenderer(renderer);
 
-        float playerX = 10;
-        float playerY = 5;
-        float velocityY = 0;
+            setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
 
-        boolean left = false;
-        boolean right = false;
-        boolean onGround = false;
-
-        boolean wardenSpawned = false;
-        float wardenX = 0;
-        float wardenY = 0;
-        int wardenHealth = 1000;
-
-        int selectedBlock = DIRT;
-
-        float cameraX = 0;
-        float cameraY = 0;
-
-        int blockSize = 48;
-
-        public GameView(Context context) {
-            super(context);
-
-            paint.setAntiAlias(false);
-            generateWorld();
-            setFocusable(true);
-        }
-
-        void generateWorld() {
-
-            world = new int[worldWidth][worldHeight];
-
-            int ground = 18;
-
-            for (int x = 0; x < worldWidth; x++) {
-
-                ground += random.nextInt(3) - 1;
-
-                if (ground < 14) ground = 14;
-                if (ground > 21) ground = 21;
-
-                for (int y = ground; y < worldHeight; y++) {
-
-                    if (y == ground) {
-                        world[x][y] = GRASS;
-                    } else if (y < ground + 4) {
-                        world[x][y] = DIRT;
-                    } else {
-                        world[x][y] = STONE;
-                    }
-                }
+            for (int i = 0; i < 8; i++) {
+                mobs.add(new Mob(
+                        random.nextFloat() * 20 - 10,
+                        1,
+                        random.nextFloat() * 20 - 10
+                ));
             }
         }
 
         @Override
-        protected void onDraw(Canvas canvas) {
+        public boolean onTouchEvent(MotionEvent e) {
 
-            super.onDraw(canvas);
+            int action = e.getActionMasked();
 
-            canvas.drawColor(Color.rgb(110, 190, 235));
+            if (action == MotionEvent.ACTION_DOWN ||
+                    action == MotionEvent.ACTION_POINTER_DOWN) {
 
-            updatePlayer();
-            updateCamera();
+                int index = e.getActionIndex();
 
-            drawWorld(canvas);
-            drawPlayer(canvas);
+                float x = e.getX(index);
+                float y = e.getY(index);
 
-            if (wardenSpawned) {
-                updateWarden();
-                drawWarden(canvas);
-            }
+                // LEFT SIDE = movement joystick
+                if (x < getWidth() * 0.45f) {
 
-            drawControls(canvas);
-            drawHotbar(canvas);
-            drawCheatButton(canvas);
+                    float cx = getWidth() * 0.20f;
+                    float cy = getHeight() * 0.78f;
 
-            invalidate();
-        }
+                    float dx = x - cx;
+                    float dy = y - cy;
 
-        void drawWorld(Canvas canvas) {
+                    float max = getWidth() * 0.14f;
 
-            int startX = Math.max(
-                    0,
-                    (int)(cameraX / blockSize) - 1
-            );
+                    float length = (float)Math.sqrt(dx * dx + dy * dy);
 
-            int endX = Math.min(
-                    worldWidth,
-                    (int)((cameraX + getWidth()) / blockSize) + 2
-            );
-
-            int startY = Math.max(
-                    0,
-                    (int)(cameraY / blockSize) - 1
-            );
-
-            int endY = Math.min(
-                    worldHeight,
-                    (int)((cameraY + getHeight()) / blockSize) + 2
-            );
-
-            for (int x = startX; x < endX; x++) {
-
-                for (int y = startY; y < endY; y++) {
-
-                    int block = world[x][y];
-
-                    if (block == AIR) continue;
-
-                    float screenX =
-                            x * blockSize - cameraX;
-
-                    float screenY =
-                            y * blockSize - cameraY;
-
-                    if (block == GRASS) {
-
-                        paint.setColor(
-                                Color.rgb(120, 190, 70)
-                        );
-
-                        canvas.drawRect(
-                                screenX,
-                                screenY,
-                                screenX + blockSize,
-                                screenY + blockSize,
-                                paint
-                        );
-
-                        paint.setColor(
-                                Color.rgb(85, 145, 55)
-                        );
-
-                        canvas.drawRect(
-                                screenX,
-                                screenY + blockSize * 0.75f,
-                                screenX + blockSize,
-                                screenY + blockSize,
-                                paint
-                        );
-
-                    } else if (block == DIRT) {
-
-                        paint.setColor(
-                                Color.rgb(130, 85, 45)
-                        );
-
-                        canvas.drawRect(
-                                screenX,
-                                screenY,
-                                screenX + blockSize,
-                                screenY + blockSize,
-                                paint
-                        );
-
-                    } else if (block == STONE) {
-
-                        paint.setColor(
-                                Color.rgb(105, 105, 105)
-                        );
-
-                        canvas.drawRect(
-                                screenX,
-                                screenY,
-                                screenX + blockSize,
-                                screenY + blockSize,
-                                paint
-                        );
+                    if (length > max) {
+                        dx = dx / length * max;
+                        dy = dy / length * max;
                     }
 
-                    paint.setColor(
-                            Color.argb(35, 0, 0, 0)
-                    );
-
-                    canvas.drawRect(
-                            screenX,
-                            screenY,
-                            screenX + blockSize,
-                            screenY + blockSize,
-                            paint
-                    );
-                }
-            }
-        }
-
-        void drawPlayer(Canvas canvas) {
-
-            float x =
-                    playerX * blockSize - cameraX;
-
-            float y =
-                    playerY * blockSize - cameraY;
-
-            paint.setColor(
-                    Color.rgb(60, 90, 200)
-            );
-
-            canvas.drawRect(
-                    x + 5,
-                    y + 5,
-                    x + blockSize - 5,
-                    y + blockSize * 1.8f,
-                    paint
-            );
-
-            paint.setColor(
-                    Color.rgb(230, 190, 150)
-            );
-
-            canvas.drawRect(
-                    x + 9,
-                    y,
-                    x + blockSize - 9,
-                    y + blockSize * 0.75f,
-                    paint
-            );
-        }
-
-        void updatePlayer() {
-
-            float speed = 0.10f;
-
-            if (left) {
-                playerX -= speed;
-            }
-
-            if (right) {
-                playerX += speed;
-            }
-
-            velocityY += 0.018f;
-
-            if (velocityY > 0.35f) {
-                velocityY = 0.35f;
-            }
-
-            moveVertical(velocityY);
-
-            if (playerX < 0) {
-                playerX = 0;
-            }
-
-            if (playerX > worldWidth - 1) {
-                playerX = worldWidth - 1;
-            }
-        }
-
-        void jumpPlayer() {
-
-            if (onGround) {
-                velocityY = -0.30f;
-                onGround = false;
-            }
-        }
-
-        void moveVertical(float amount) {
-
-            float newY = playerY + amount;
-
-            if (amount > 0) {
-
-                int blockX =
-                        (int)(playerX + 0.5f);
-
-                int blockY =
-                        (int)(newY + 1.8f);
-
-                if (isSolid(blockX, blockY)) {
-
-                    playerY =
-                            blockY - 1.8f;
-
-                    velocityY = 0;
-                    onGround = true;
-
-                } else {
-
-                    playerY = newY;
-                    onGround = false;
+                    joyX = dx / max;
+                    joyY = dy / max;
                 }
 
-            } else {
-
-                int blockX =
-                        (int)(playerX + 0.5f);
-
-                int blockY =
-                        (int)newY;
-
-                if (isSolid(blockX, blockY)) {
-
-                    playerY =
-                            blockY + 1;
-
-                    velocityY = 0;
-
-                } else {
-
-                    playerY = newY;
+                // RIGHT SIDE = camera
+                else {
+                    lookX = x;
+                    lookY = y;
                 }
-            }
-        }
 
-        boolean isSolid(int x, int y) {
-
-            if (x < 0 || x >= worldWidth) {
                 return true;
             }
 
-            if (y < 0) {
-                return true;
-            }
+            if (action == MotionEvent.ACTION_MOVE) {
 
-            if (y >= worldHeight) {
-                return false;
-            }
+                for (int i = 0; i < e.getPointerCount(); i++) {
 
-            return world[x][y] != AIR;
-        }
+                    float x = e.getX(i);
+                    float y = e.getY(i);
 
-        void updateCamera() {
+                    // Whole joystick circle works
+                    if (x < getWidth() * 0.45f) {
 
-            cameraX =
-                    playerX * blockSize -
-                    getWidth() / 2f;
+                        float cx = getWidth() * 0.20f;
+                        float cy = getHeight() * 0.78f;
 
-            cameraY =
-                    playerY * blockSize -
-                    getHeight() / 2f;
+                        float dx = x - cx;
+                        float dy = y - cy;
 
-            if (cameraX < 0) {
-                cameraX = 0;
-            }
+                        float max = getWidth() * 0.14f;
 
-            float maxX =
-                    worldWidth * blockSize -
-                    getWidth();
+                        float length =
+                                (float)Math.sqrt(dx * dx + dy * dy);
 
-            if (cameraX > maxX) {
-                cameraX = Math.max(0, maxX);
-            }
-
-            if (cameraY < 0) {
-                cameraY = 0;
-            }
-
-            float maxY =
-                    worldHeight * blockSize -
-                    getHeight();
-
-            if (cameraY > maxY) {
-                cameraY = Math.max(0, maxY);
-            }
-        }
-
-        void drawControls(Canvas canvas) {
-
-            int bottom = getHeight() - 100;
-
-            paint.setColor(
-                    Color.argb(150, 30, 30, 30)
-            );
-
-            canvas.drawCircle(
-                    100,
-                    bottom,
-                    65,
-                    paint
-            );
-
-            canvas.drawCircle(
-                    240,
-                    bottom,
-                    65,
-                    paint
-            );
-
-            canvas.drawCircle(
-                    getWidth() - 100,
-                    bottom,
-                    65,
-                    paint
-            );
-
-            paint.setColor(Color.WHITE);
-            paint.setTextSize(40);
-            paint.setTextAlign(Paint.Align.CENTER);
-
-            canvas.drawText(
-                    "<",
-                    100,
-                    bottom + 14,
-                    paint
-            );
-
-            canvas.drawText(
-                    ">",
-                    240,
-                    bottom + 14,
-                    paint
-            );
-
-            canvas.drawText(
-                    "^",
-                    getWidth() - 100,
-                    bottom + 14,
-                    paint
-            );
-        }
-
-        void drawHotbar(Canvas canvas) {
-
-            int size = 65;
-
-            int startX =
-                    getWidth() / 2 - 97;
-
-            for (int i = 0; i < 3; i++) {
-
-                int x =
-                        startX + i * size;
-
-                paint.setColor(
-                        Color.argb(200, 40, 40, 40)
-                );
-
-                canvas.drawRect(
-                        x,
-                        getHeight() - 180,
-                        x + size,
-                        getHeight() - 115,
-                        paint
-                );
-
-                int block = i + 1;
-
-                if (block == GRASS) {
-
-                    paint.setColor(
-                            Color.rgb(120, 190, 70)
-                    );
-
-                } else if (block == DIRT) {
-
-                    paint.setColor(
-                            Color.rgb(130, 85, 45)
-                    );
-
-                } else {
-
-                    paint.setColor(
-                            Color.rgb(105, 105, 105)
-                    );
-                }
-
-                canvas.drawRect(
-                        x + 10,
-                        getHeight() - 170,
-                        x + 55,
-                        getHeight() - 125,
-                        paint
-                );
-
-                if (selectedBlock == block) {
-
-                    paint.setStyle(
-                            Paint.Style.STROKE
-                    );
-
-                    paint.setStrokeWidth(4);
-
-                    paint.setColor(Color.WHITE);
-
-                    canvas.drawRect(
-                            x,
-                            getHeight() - 180,
-                            x + size,
-                            getHeight() - 115,
-                            paint
-                    );
-
-                    paint.setStyle(
-                            Paint.Style.FILL
-                    );
-                }
-            }
-        }
-
-        void drawCheatButton(Canvas canvas) {
-
-            paint.setColor(
-                    Color.argb(190, 30, 30, 30)
-            );
-
-            canvas.drawRect(
-                    20,
-                    20,
-                    190,
-                    80,
-                    paint
-            );
-
-            paint.setColor(Color.WHITE);
-            paint.setTextSize(28);
-            paint.setTextAlign(Paint.Align.CENTER);
-
-            canvas.drawText(
-                    "CHEAT",
-                    105,
-                    60,
-                    paint
-            );
-        }
-
-        void spawnWarden() {
-
-            wardenSpawned = true;
-
-            wardenX =
-                    Math.min(
-                            worldWidth - 2,
-                            playerX + 5
-                    );
-
-            wardenY = playerY;
-
-            wardenHealth = 1000;
-        }
-
-        void updateWarden() {
-
-            if (wardenX < playerX) {
-                wardenX += 0.025f;
-            }
-
-            if (wardenX > playerX) {
-                wardenX -= 0.025f;
-            }
-
-            int groundY =
-                    worldHeight - 1;
-
-            for (int y = 0;
-                    y < worldHeight;
-                    y++) {
-
-                if (isSolid(
-                        (int)wardenX,
-                        y
-                )) {
-
-                    groundY = y;
-                    break;
-                }
-            }
-
-            wardenY =
-                    groundY - 2;
-        }
-
-        void drawWarden(Canvas canvas) {
-
-            float x =
-                    wardenX * blockSize -
-                    cameraX;
-
-            float y =
-                    wardenY * blockSize -
-                    cameraY;
-
-            paint.setColor(
-                    Color.rgb(25, 30, 35)
-            );
-
-            canvas.drawRect(
-                    x,
-                    y + 25,
-                    x + blockSize * 1.5f,
-                    y + blockSize * 2.2f,
-                    paint
-            );
-
-            paint.setColor(
-                    Color.rgb(35, 40, 45)
-            );
-
-            canvas.drawRect(
-                    x + 10,
-                    y,
-                    x + blockSize * 1.4f,
-                    y + blockSize,
-                    paint
-            );
-
-            paint.setColor(
-                    Color.rgb(80, 180, 210)
-            );
-
-            canvas.drawRect(
-                    x + 20,
-                    y + 25,
-                    x + 30,
-                    y + 35,
-                    paint
-            );
-
-            canvas.drawRect(
-                    x + 45,
-                    y + 25,
-                    x + 55,
-                    y + 35,
-                    paint
-            );
-
-            paint.setColor(Color.DKGRAY);
-
-            canvas.drawRect(
-                    x,
-                    y - 18,
-                    x + blockSize * 1.5f,
-                    y - 6,
-                    paint
-            );
-
-            paint.setColor(Color.RED);
-
-            canvas.drawRect(
-                    x,
-                    y - 18,
-                    x + blockSize * 1.5f *
-                            (wardenHealth / 1000f),
-                    y - 6,
-                    paint
-            );
-
-            paint.setColor(Color.WHITE);
-            paint.setTextSize(20);
-            paint.setTextAlign(Paint.Align.CENTER);
-
-            canvas.drawText(
-                    "WARDEN",
-                    x + blockSize * 0.75f,
-                    y - 25,
-                    paint
-            );
-        }
-
-        void interactWorld(
-                float screenX,
-                float screenY
-        ) {
-
-            int worldX =
-                    (int)((screenX + cameraX) /
-                            blockSize);
-
-            int worldY =
-                    (int)((screenY + cameraY) /
-                            blockSize);
-
-            if (worldX < 0 ||
-                    worldX >= worldWidth ||
-                    worldY < 0 ||
-                    worldY >= worldHeight) {
-
-                return;
-            }
-
-            float centerX =
-                    playerX + 0.5f;
-
-            float centerY =
-                    playerY + 0.9f;
-
-            float dx =
-                    worldX + 0.5f - centerX;
-
-            float dy =
-                    worldY + 0.5f - centerY;
-
-            float distance =
-                    (float)Math.sqrt(
-                            dx * dx + dy * dy
-                    );
-
-            if (distance > 4.0f) {
-                return;
-            }
-
-            if (world[worldX][worldY] != AIR) {
-
-                world[worldX][worldY] =
-                        AIR;
-
-            } else {
-
-                if (!isPlayerInsideBlock(
-                        worldX,
-                        worldY
-                )) {
-
-                    world[worldX][worldY] =
-                            selectedBlock;
-                }
-            }
-        }
-
-        boolean isPlayerInsideBlock(
-                int x,
-                int y
-        ) {
-
-            return playerX < x + 1 &&
-                    playerX + 0.8f > x &&
-                    playerY < y + 1 &&
-                    playerY + 1.8f > y;
-        }
-
-        void openCheatInput() {
-
-            final EditText input =
-                    new EditText(getContext());
-
-            input.setSingleLine(true);
-            input.setHint("Enter cheat code");
-
-            android.app.AlertDialog dialog =
-                    new android.app.AlertDialog.Builder(
-                            getContext()
-                    )
-                    .setTitle("Cheat Code")
-                    .setView(input)
-                    .setNegativeButton(
-                            "Cancel",
-                            null
-                    )
-                    .setPositiveButton(
-                            "Enter",
-                            null
-                    )
-                    .create();
-
-            dialog.setOnShowListener(
-                    d -> {
-
-                        dialog.getButton(
-                                android.app.AlertDialog.BUTTON_POSITIVE
-                        ).setOnClickListener(
-                                v -> {
-
-                                    String code =
-                                            input.getText()
-                                                    .toString()
-                                                    .trim()
-                                                    .toUpperCase();
-
-                                    if (code.equals("XZ")) {
-
-                                        spawnWarden();
-
-                                        dialog.dismiss();
-                                    }
-                                }
-                        );
-
-                        input.requestFocus();
-
-                        dialog.getWindow()
-                                .setSoftInputMode(
-                                        WindowManager.LayoutParams
-                                                .SOFT_INPUT_STATE_ALWAYS_VISIBLE
-                                );
-                    }
-            );
-
-            dialog.show();
-        }
-
-        @Override
-        public boolean onTouchEvent(
-                MotionEvent event
-        ) {
-
-            float x = event.getX();
-            float y = event.getY();
-
-            if (event.getAction() ==
-                    MotionEvent.ACTION_DOWN) {
-
-                // Cheat button
-                if (x >= 20 &&
-                        x <= 190 &&
-                        y >= 20 &&
-                        y <= 80) {
-
-                    openCheatInput();
-                    return true;
-                }
-
-                // Hotbar
-                if (y >= getHeight() - 190 &&
-                        y <= getHeight() - 100) {
-
-                    int startX =
-                            getWidth() / 2 - 97;
-
-                    for (int i = 0; i < 3; i++) {
-
-                        int bx =
-                                startX + i * 65;
-
-                        if (x >= bx &&
-                                x <= bx + 65) {
-
-                            selectedBlock = i + 1;
-                            return true;
+                        if (length > max) {
+                            dx = dx / length * max;
+                            dy = dy / length * max;
                         }
+
+                        joyX = dx / max;
+                        joyY = dy / max;
                     }
                 }
-
-                // Controls
-                if (y > getHeight() - 180) {
-
-                    if (x < 165) {
-
-                        left = true;
-
-                    } else if (x < 310) {
-
-                        right = true;
-
-                    } else if (
-                            x > getWidth() - 180
-                    ) {
-
-                        jumpPlayer();
-                    }
-
-                    return true;
-                }
-
-                // World interaction
-                interactWorld(x, y);
 
                 return true;
             }
 
-            if (event.getAction() ==
-                    MotionEvent.ACTION_UP ||
-                    event.getAction() ==
-                    MotionEvent.ACTION_CANCEL) {
+            if (action == MotionEvent.ACTION_UP ||
+                    action == MotionEvent.ACTION_POINTER_UP ||
+                    action == MotionEvent.ACTION_CANCEL) {
 
-                left = false;
-                right = false;
+                joyX = 0;
+                joyY = 0;
 
                 return true;
             }
 
             return true;
+        }
+
+        void jump() {
+            if (!jumping) {
+                jumping = true;
+                playerY += 1.2f;
+            }
+        }
+
+        void update() {
+
+            float speed = 0.08f;
+
+            float forwardX =
+                    (float)Math.sin(Math.toRadians(yaw));
+
+            float forwardZ =
+                    (float)Math.cos(Math.toRadians(yaw));
+
+            playerX += (-joyY * forwardX + joyX * forwardZ) * speed;
+            playerZ += (-joyY * forwardZ - joyX * forwardX) * speed;
+
+            if (jumping) {
+                playerY -= 0.025f;
+
+                if (playerY <= 2) {
+                    playerY = 2;
+                    jumping = false;
+                }
+            }
+
+            // Mobs flee when hit / flee state
+            for (Mob m : mobs) {
+
+                if (m.fleeTimer > 0) {
+
+                    float dx = m.x - playerX;
+                    float dz = m.z - playerZ;
+
+                    float d =
+                            (float)Math.sqrt(dx * dx + dz * dz);
+
+                    if (d > 0.01f) {
+                        m.x += dx / d * 0.03f;
+                        m.z += dz / d * 0.03f;
+                    }
+
+                    m.fleeTimer--;
+                }
+            }
+        }
+
+        class Mob {
+
+            float x, y, z;
+            int hp = 20;
+            int fleeTimer = 0;
+
+            Mob(float x, float y, float z) {
+                this.x = x;
+                this.y = y;
+                this.z = z;
+            }
+
+            void hit() {
+                hp -= 5;
+                fleeTimer = 180;
+            }
+        }
+
+        class Renderer3D implements GLSurfaceView.Renderer {
+
+            Cube cube;
+
+            float[] projection = new float[16];
+            float[] view = new float[16];
+            float[] model = new float[16];
+            float[] mvp = new float[16];
+
+            float time = 0;
+
+            @Override
+            public void onSurfaceCreated(
+                    javax.microedition.khronos.egl.EGLConfig config) {
+
+                GLES20.glEnable(GLES20.GL_DEPTH_TEST);
+                GLES20.glClearColor(
+                        0.45f,
+                        0.70f,
+                        1.0f,
+                        1.0f
+                );
+
+                cube = new Cube();
+                lastTime = System.currentTimeMillis();
+            }
+
+            @Override
+            public void onSurfaceChanged(
+                    javax.microedition.khronos.opengles.GL10 gl,
+                    int width,
+                    int height) {
+
+                GLES20.glViewport(0, 0, width, height);
+
+                float ratio = (float)width / height;
+
+                Matrix.perspectiveM(
+                        projection,
+                        0,
+                        70,
+                        ratio,
+                        0.1f,
+                        100
+                );
+            }
+
+            @Override
+            public void onDrawFrame(
+                    javax.microedition.khronos.opengles.GL10 gl) {
+
+                long now = System.currentTimeMillis();
+
+                float dt =
+                        (now - lastTime) / 1000.0f;
+
+                lastTime = now;
+
+                time += dt;
+
+                update();
+
+                // 24-hour day/night cycle
+                float day =
+                        (float)((Math.sin(
+                                time * Math.PI * 2 / 120.0
+                        ) + 1) * 0.5);
+
+                float sky = 0.20f + day * 0.55f;
+
+                GLES20.glClearColor(
+                        sky * 0.5f,
+                        sky * 0.75f,
+                        sky,
+                        1
+                );
+
+                GLES20.glClear(
+                        GLES20.GL_COLOR_BUFFER_BIT |
+                        GLES20.GL_DEPTH_BUFFER_BIT
+                );
+
+                Matrix.setLookAtM(
+                        view,
+                        0,
+                        playerX,
+                        playerY,
+                        playerZ,
+                        playerX,
+                        playerY,
+                        playerZ - 5,
+                        0,
+                        1,
+                        0
+                );
+
+                // Ground
+                drawCube(
+                        0,
+                        0,
+                        0,
+                        20,
+                        0.5f,
+                        20,
+                        0.25f,
+                        0.70f,
+                        0.20f
+                );
+
+                // Dirt/stone world blocks
+                for (int x = -10; x <= 10; x++) {
+                    for (int z = -10; z <= 10; z++) {
+
+                        if ((x + z) % 5 == 0) {
+                            drawCube(
+                                    x,
+                                    0.7f,
+                                    z,
+                                    1,
+                                    1,
+                                    1,
+                                    0.35f,
+                                    0.22f,
+                                    0.10f
+                            );
+                        }
+                    }
+                }
+
+                // Mobs
+                for (Mob m : mobs) {
+
+                    drawCube(
+                            m.x,
+                            m.y,
+                            m.z,
+                            0.9f,
+                            1.8f,
+                            0.9f,
+                            0.25f,
+                            0.55f,
+                            0.25f
+                    );
+                }
+
+                // Warden can be spawned with XZ
+                // handled below
+            }
+
+            void drawCube(
+                    float x,
+                    float y,
+                    float z,
+                    float sx,
+                    float sy,
+                    float sz,
+                    float r,
+                    float g,
+                    float b) {
+
+                Matrix.setIdentityM(model, 0);
+
+                Matrix.translateM(
+                        model,
+                        0,
+                        x,
+                        y,
+                        z
+                );
+
+                Matrix.scaleM(
+                        model,
+                        0,
+                        sx,
+                        sy,
+                        sz
+                );
+
+                float[] temp = new float[16];
+
+                Matrix.multiplyMM(
+                        temp,
+                        0,
+                        view,
+                        0,
+                        model,
+                        0
+                );
+
+                Matrix.multiplyMM(
+                        mvp,
+                        0,
+                        projection,
+                        0,
+                        temp,
+                        0
+                );
+
+                cube.draw(mvp, r, g, b);
+            }
+        }
+
+        class Cube {
+
+            FloatBuffer vertices;
+            int program;
+
+            final float[] data = {
+
+                    -0.5f,-0.5f,-0.5f,
+                     0.5f,-0.5f,-0.5f,
+                     0.5f, 0.5f,-0.5f,
+                    -0.5f, 0.5f,-0.5f,
+
+                    -0.5f,-0.5f, 0.5f,
+                     0.5f,-0.5f, 0.5f,
+                     0.5f, 0.5f, 0.5f,
+                    -0.5f, 0.5f, 0.5f
+            };
+
+            Cube() {
+
+                ByteBuffer bb =
+                        ByteBuffer.allocateDirect(
+                                data.length * 4
+                        );
+
+                bb.order(
+                        ByteOrder.nativeOrder()
+                );
+
+                vertices = bb.asFloatBuffer();
+                vertices.put(data);
+                vertices.position(0);
+
+                String vertexShader =
+                        "attribute vec4 v;" +
+                        "uniform mat4 m;" +
+                        "void main(){gl_Position=m*v;}";
+
+                String fragmentShader =
+                        "precision mediump float;" +
+                        "uniform vec4 c;" +
+                        "void main(){gl_FragColor=c;}";
+
+                int vs = loadShader(
+                        GLES20.GL_VERTEX_SHADER,
+                        vertexShader
+                );
+
+                int fs = loadShader(
+                        GLES20.GL_FRAGMENT_SHADER,
+                        fragmentShader
+                );
+
+                program =
+                        GLES20.glCreateProgram();
+
+                GLES20.glAttachShader(
+                        program,
+                        vs
+                );
+
+                GLES20.glAttachShader(
+                        program,
+                        fs
+                );
+
+                GLES20.glLinkProgram(program);
+            }
+
+            void draw(
+                    float[] matrix,
+                    float r,
+                    float g,
+                    float b) {
+
+                GLES20.glUseProgram(program);
+
+                int pos =
+                        GLES20.glGetAttribLocation(
+                                program,
+                                "v"
+                        );
+
+                int mat =
+                        GLES20.glGetUniformLocation(
+                                program,
+                                "m"
+                        );
+
+                int col =
+                        GLES20.glGetUniformLocation(
+                                program,
+                                "c"
+                        );
+
+                GLES20.glEnableVertexAttribArray(pos);
+
+                GLES20.glVertexAttribPointer(
+                        pos,
+                        3,
+                        GLES20.GL_FLOAT,
+                        false,
+                        12,
+                        vertices
+                );
+
+                GLES20.glUniformMatrix4fv(
+                        mat,
+                        1,
+                        false,
+                        matrix,
+                        0
+                );
+
+                GLES20.glUniform4f(
+                        col,
+                        r,
+                        g,
+                        b,
+                        1
+                );
+
+                GLES20.glDrawArrays(
+                        GLES20.GL_TRIANGLE_FAN,
+                        0,
+                        4
+                );
+
+                GLES20.glDisableVertexAttribArray(pos);
+            }
+
+            int loadShader(
+                    int type,
+                    String source) {
+
+                int shader =
+                        GLES20.glCreateShader(type);
+
+                GLES20.glShaderSource(
+                        shader,
+                        source
+                );
+
+                GLES20.glCompileShader(shader);
+
+                return shader;
+            }
         }
     }
 }
