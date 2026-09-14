@@ -1,88 +1,114 @@
-package com.example.sandboxgame;
+class SurvivalGame {
+  constructor(size = 10) {
+    this.size = size;
+    this.player = { x: 5, y: 5, hp: 100, hunger: 100, wood: 0, food: 2 };
+    this.day = 1;
+    this.dead = false;
+    this.generateMap();
+  }
 
-import java.util.Random;
-
-public class World {
-
-    public static final int TILE_SIZE = 48;
-    public final int width;
-    public final int height;
-
-    private final int[][] tiles;
-    public final int[] surfaceHeight;
-
-    public World(int width, int height) {
-        this.width = width;
-        this.height = height;
-        this.tiles = new int[width][height];
-        this.surfaceHeight = new int[width];
-        generate();
+  generateMap() {
+    this.map = [];
+    for (let y = 0; y < this.size; y++) {
+      const row = [];
+      for (let x = 0; x < this.size; x++) {
+        const r = Math.random();
+        if (r < 0.1) row.push('T');       // tree (wood)
+        else if (r < 0.15) row.push('F');  // food
+        else if (r < 0.05) row.push('E');  // enemy
+        else row.push('.');
+      }
+      this.map.push(row);
     }
+  }
 
-    private void generate() {
-        Random rnd = new Random(1337);
-        int base = height / 2;
-
-        for (int x = 0; x < width; x++) {
-            double h = Math.sin(x * 0.08) * 3.0 + Math.sin(x * 0.21) * 1.5;
-            int surface = base + (int) Math.round(h);
-            surfaceHeight[x] = surface;
-
-            for (int y = 0; y < height; y++) {
-                int type;
-                if (y < surface) {
-                    type = Block.AIR;
-                } else if (y == surface) {
-                    type = Block.GRASS;
-                } else if (y < surface + 4) {
-                    type = Block.DIRT;
-                } else {
-                    type = Block.STONE;
-                    if (y > surface + 6 && rnd.nextInt(100) < 6) {
-                        type = Block.AIR;
-                    }
-                }
-                tiles[x][y] = type;
-            }
-        }
-
-        for (int x = 3; x < width - 3; x++) {
-            if (rnd.nextInt(100) < 10) {
-                int surface = surfaceHeight[x];
-                int trunkTop = surface - (3 + rnd.nextInt(2));
-                for (int ty = trunkTop; ty < surface; ty++) {
-                    if (inBounds(x, ty)) tiles[x][ty] = Block.WOOD;
-                }
-                for (int lx = -1; lx <= 1; lx++) {
-                    for (int ly = -1; ly <= 0; ly++) {
-                        int bx = x + lx, by = trunkTop - 1 + ly;
-                        if (inBounds(bx, by) && tiles[bx][by] == Block.AIR) {
-                            tiles[bx][by] = Block.LEAVES;
-                        }
-                    }
-                }
-            }
-        }
+  render() {
+    let out = `Day ${this.day} | HP:${this.player.hp} Hunger:${this.player.hunger} Wood:${this.player.wood} Food:${this.player.food}\n`;
+    for (let y = 0; y < this.size; y++) {
+      let line = '';
+      for (let x = 0; x < this.size; x++) {
+        line += (x === this.player.x && y === this.player.y) ? 'P' : this.map[y][x];
+      }
+      out += line + '\n';
     }
+    console.log(out);
+    return out;
+  }
 
-    public boolean inBounds(int x, int y) {
-        return x >= 0 && x < width && y >= 0 && y < height;
+  tick() {
+    this.player.hunger -= 5;
+    if (this.player.hunger <= 0) {
+      this.player.hunger = 0;
+      this.player.hp -= 10;
     }
+    if (this.player.hp <= 0) {
+      console.log('You died on day ' + this.day);
+      this.dead = true;
+    }
+    this.day++;
+  }
 
-    public int getBlock(int x, int y) {
-        if (!inBounds(x, y)) return Block.STONE;
-        return tiles[x][y];
-    }
+  move(dir) {
+    if (this.dead) return console.log('Game over.');
+    const dirs = { w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0] };
+    const [dx, dy] = dirs[dir] || [0, 0];
+    this.player.x = Math.max(0, Math.min(this.size - 1, this.player.x + dx));
+    this.player.y = Math.max(0, Math.min(this.size - 1, this.player.y + dy));
 
-    public void setBlock(int x, int y, int type) {
-        if (inBounds(x, y)) tiles[x][y] = type;
-    }
+    const tile = this.map[this.player.y][this.player.x];
+    if (tile === 'T') { this.player.wood++; this.map[this.player.y][this.player.x] = '.'; }
+    else if (tile === 'F') { this.player.food++; this.map[this.player.y][this.player.x] = '.'; }
+    else if (tile === 'E') { this.player.hp -= 20; this.map[this.player.y][this.player.x] = '.'; console.log('Enemy attacked!'); }
 
-    public boolean isSolidAt(int x, int y) {
-        return Block.isSolid(getBlock(x, y));
-    }
+    this.tick();
+    this.render();
+  }
 
-    public int spawnSurfaceY(int x) {
-        return inBounds(x, 0) ? surfaceHeight[Math.max(0, Math.min(width - 1, x))] : height / 2;
+  eat() {
+    if (this.player.food > 0) {
+      this.player.food--;
+      this.player.hunger = Math.min(100, this.player.hunger + 30);
+    } else {
+      console.log('No food!');
     }
+    this.render();
+  }
 }
+
+function attachTouchControls(game, element) {
+  let startX = 0, startY = 0;
+
+  element.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    startX = t.clientX;
+    startY = t.clientY;
+  });
+
+  element.addEventListener('touchend', (e) => {
+    const t = e.changedTouches[0];
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    const absX = Math.abs(dx), absY = Math.abs(dy);
+
+    if (Math.max(absX, absY) < 20) return; // ignore taps/jitter
+
+    if (absX > absY) {
+      game.move(dx > 0 ? 'd' : 'a'); // swipe right/left
+    } else {
+      game.move(dy > 0 ? 's' : 'w'); // swipe down/up
+    }
+  });
+
+  // double-tap to eat
+  let lastTap = 0;
+  element.addEventListener('touchend', () => {
+    const now = Date.now();
+    if (now - lastTap < 300) game.eat();
+    lastTap = now;
+  });
+}
+
+// Usage:
+const game = new SurvivalGame();
+game.render();
+// attachTouchControls(game, someElementYouAlreadyHave);
