@@ -1,4 +1,4 @@
-package com.example.tictactoe;
+package com.example.doomai;
 
 import android.app.Activity;
 import android.os.Bundle;
@@ -12,957 +12,868 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
-        setContentView(new SurvivalGame(this));
+        setContentView(new DoomGame(this));
     }
 
-    public static class SurvivalGame extends View {
+    public static class DoomGame extends View {
 
         Paint p = new Paint();
         Random random = new Random();
 
-        float playerX = 500;
-        float playerY = 300;
-        float velocityX = 0;
-        float velocityY = 0;
+        float px = 3.5f;
+        float py = 3.5f;
+        float angle = 0;
 
-        boolean left, right, jumping;
-        boolean attacking;
+        int hp = 100;
+        int ammo = 50;
+        int kills = 0;
 
-        int health = 100;
-        int hunger = 100;
+        boolean gameOver = false;
+        boolean victory = false;
 
-        int wood = 0;
-        int stone = 0;
-        int coal = 0;
-        int iron = 0;
-        int food = 3;
+        long lastShot = 0;
 
-        boolean grounded = false;
+        int[][] map = {
+            {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
+            {1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,1},
+            {1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,1,1,1,0,1},
+            {1,0,1,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,1},
+            {1,0,1,0,1,1,1,1,1,0,1,1,1,0,1,0,1,1,0,1},
+            {1,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,1},
+            {1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,0,1,0,1,1},
+            {1,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,1},
+            {1,0,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,0,1},
+            {1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1},
+            {1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,0,1},
+            {1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,1},
+            {1,0,1,1,1,0,1,1,1,1,1,1,1,1,0,1,0,1,0,1},
+            {1,0,0,0,1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,1},
+            {1,1,1,0,1,1,1,1,1,1,1,1,0,1,0,1,1,1,0,1},
+            {1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1},
+            {1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1},
+            {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+            {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+            {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}
+        };
 
-        float cameraX = 0;
-
-        long gameTime = 0;
-
-        ArrayList<Tree> trees = new ArrayList<>();
-        ArrayList<Rock> rocks = new ArrayList<>();
         ArrayList<Enemy> enemies = new ArrayList<>();
-        ArrayList<Block> blocks = new ArrayList<>();
 
-        public SurvivalGame(Context context) {
-            super(context);
+        // Finger states
+        HashSet<Integer> moveFingers = new HashSet<>();
+        HashSet<Integer> fireFingers = new HashSet<>();
+        HashSet<Integer> turnLFingers = new HashSet<>();
+        HashSet<Integer> turnRFingers = new HashSet<>();
+        HashSet<Integer> jumpFingers = new HashSet<>();
+
+        public DoomGame(Context c) {
+            super(c);
 
             p.setAntiAlias(false);
 
-            generateWorld();
+            spawn(5.5f, 3.5f, 0);
+            spawn(10.5f, 3.5f, 1);
+            spawn(16.5f, 3.5f, 0);
+            spawn(4.5f, 7.5f, 1);
+            spawn(11.5f, 7.5f, 0);
+            spawn(17.5f, 9.5f, 1);
+            spawn(5.5f, 13.5f, 0);
+            spawn(15.5f, 15.5f, 1);
         }
 
-        void generateWorld() {
-
-            // Trees
-            for (int i = 0; i < 80; i++) {
-
-                float x = 200 + random.nextInt(12000);
-
-                trees.add(
-                        new Tree(
-                                x,
-                                330
-                        )
-                );
-            }
-
-            // Rocks
-            for (int i = 0; i < 70; i++) {
-
-                float x = 300 + random.nextInt(12000);
-
-                rocks.add(
-                        new Rock(
-                                x,
-                                350
-                        )
-                );
-            }
-
-            // Enemies
-            for (int i = 0; i < 30; i++) {
-
-                float x = 800 + random.nextInt(11000);
-
-                enemies.add(
-                        new Enemy(
-                                x,
-                                330
-                        )
-                );
-            }
-
-            // underground blocks
-            for (int x = 0; x < 13000; x += 40) {
-
-                for (int y = 390; y < 800; y += 40) {
-
-                    blocks.add(
-                            new Block(
-                                    x,
-                                    y,
-                                    random.nextInt(100)
-                            )
-                    );
-                }
-            }
+        void spawn(float x, float y, int type) {
+            Enemy e = new Enemy();
+            e.x = x;
+            e.y = y;
+            e.type = type;
+            e.hp = type == 0 ? 45 : 75;
+            enemies.add(e);
         }
 
         @Override
-        protected void onDraw(Canvas canvas) {
+        protected void onDraw(Canvas c) {
 
-            int width = getWidth();
-            int height = getHeight();
+            int w = getWidth();
+            int h = getHeight();
 
-            gameTime++;
+            if (gameOver) {
+                drawEnd(c, w, h, false);
+                postInvalidateDelayed(16);
+                return;
+            }
 
-            drawSky(canvas, width, height);
+            if (victory) {
+                drawEnd(c, w, h, true);
+                postInvalidateDelayed(16);
+                return;
+            }
 
-            cameraX = playerX - width * 0.5f;
+            drawWorld(c, w, h);
+            drawWeapon(c, w, h);
+            drawHUD(c, w, h);
+            drawControls(c, w, h);
 
-            if (cameraX < 0)
-                cameraX = 0;
-
-            canvas.save();
-
-            canvas.translate(-cameraX, 0);
-
-            drawTerrain(canvas);
-            drawBlocks(canvas);
-            drawTrees(canvas);
-            drawRocks(canvas);
-            drawEnemies(canvas);
-            drawPlayer(canvas);
-
-            canvas.restore();
-
-            drawInterface(canvas, width, height);
-
-            updateGame();
+            update();
 
             postInvalidateDelayed(16);
         }
 
-        void drawSky(Canvas c, int w, int h) {
+        // ---------------- WORLD ----------------
 
-            int cycle = (int)((gameTime / 5) % 240);
+        void drawWorld(Canvas c, int w, int h) {
 
-            if (cycle < 120) {
+            p.setColor(Color.rgb(35, 40, 60));
+            c.drawRect(0, 0, w, h / 2, p);
+
+            p.setColor(Color.rgb(40, 35, 35));
+            c.drawRect(0, h / 2, w, h, p);
+
+            float fov = (float)Math.toRadians(70);
+
+            for (int x = 0; x < w; x += 3) {
+
+                float ra =
+                    angle - fov / 2 +
+                    fov * x / (float)w;
+
+                float rx = (float)Math.cos(ra);
+                float ry = (float)Math.sin(ra);
+
+                float dist = 0;
+
+                while (dist < 18) {
+
+                    dist += .035f;
+
+                    int mx = (int)(px + rx * dist);
+                    int my = (int)(py + ry * dist);
+
+                    if (mx < 0 ||
+                        my < 0 ||
+                        mx >= 20 ||
+                        my >= 20) {
+                        break;
+                    }
+
+                    if (map[my][mx] == 1)
+                        break;
+                }
+
+                float corrected =
+                    dist *
+                    (float)Math.cos(ra - angle);
+
+                if (corrected < .1f)
+                    corrected = .1f;
+
+                int height =
+                    (int)(h * .8f / corrected);
+
+                if (height > h)
+                    height = h;
+
+                int top =
+                    h / 2 - height / 2;
+
+                int bottom =
+                    h / 2 + height / 2;
+
+                int shade =
+                    (int)(170 / (1 + corrected * .08f));
+
+                if (shade < 35)
+                    shade = 35;
 
                 p.setColor(Color.rgb(
-                        90,
-                        180,
-                        240
+                    shade,
+                    shade / 2,
+                    shade / 3
                 ));
 
-            } else {
-
-                p.setColor(Color.rgb(
-                        20,
-                        30,
-                        65
-                ));
+                c.drawRect(
+                    x,
+                    top,
+                    x + 3,
+                    bottom,
+                    p
+                );
             }
 
-            c.drawRect(0, 0, w, h, p);
+            drawEnemies(c, w, h);
+        }
 
-            // sun/moon
+        void drawEnemies(Canvas c, int w, int h) {
 
-            if (cycle < 120) {
+            for (Enemy e : enemies) {
+
+                if (e.dead)
+                    continue;
+
+                float dx = e.x - px;
+                float dy = e.y - py;
+
+                float dist =
+                    (float)Math.sqrt(
+                        dx * dx + dy * dy
+                    );
+
+                if (dist > 15)
+                    continue;
+
+                float a =
+                    (float)Math.atan2(dy, dx);
+
+                float relative =
+                    normalize(a - angle);
+
+                float fov =
+                    (float)Math.toRadians(70);
+
+                if (Math.abs(relative) > fov / 2)
+                    continue;
+
+                float sx =
+                    w / 2f +
+                    relative / fov * w;
+
+                float size =
+                    h * .7f / dist;
+
+                p.setColor(
+                    e.type == 0
+                        ? Color.rgb(190,45,45)
+                        : Color.rgb(70,190,70)
+                );
+
+                c.drawCircle(
+                    sx,
+                    h / 2f,
+                    size * .28f,
+                    p
+                );
+
+                p.setColor(Color.DKGRAY);
+
+                c.drawRect(
+                    sx - size * .23f,
+                    h / 2f,
+                    sx + size * .23f,
+                    h / 2f + size * .45f,
+                    p
+                );
 
                 p.setColor(Color.YELLOW);
 
                 c.drawCircle(
-                        w - 100,
-                        90,
-                        40,
-                        p
-                );
-
-            } else {
-
-                p.setColor(Color.WHITE);
-
-                c.drawCircle(
-                        w - 100,
-                        90,
-                        30,
-                        p
-                );
-            }
-
-            // clouds
-
-            p.setColor(Color.WHITE);
-
-            for (int i = 0; i < 8; i++) {
-
-                float x =
-                        (i * 250 + gameTime * 0.2f)
-                                % (w + 300);
-
-                c.drawCircle(
-                        x,
-                        130 + i % 3 * 35,
-                        25,
-                        p
-                );
-
-                c.drawCircle(
-                        x + 25,
-                        130 + i % 3 * 35,
-                        30,
-                        p
-                );
-            }
-        }
-
-        void drawTerrain(Canvas c) {
-
-            // grass
-
-            p.setColor(Color.rgb(
-                    55,
-                    170,
-                    60
-            ));
-
-            c.drawRect(
-                    0,
-                    350,
-                    13000,
-                    390,
+                    sx - size * .09f,
+                    h / 2f - size * .06f,
+                    size * .04f,
                     p
-            );
+                );
 
-            // dirt
-
-            p.setColor(Color.rgb(
-                    120,
-                    80,
-                    45
-            ));
-
-            c.drawRect(
-                    0,
-                    390,
-                    13000,
-                    900,
+                c.drawCircle(
+                    sx + size * .09f,
+                    h / 2f - size * .06f,
+                    size * .04f,
                     p
-            );
-
-            // water
-
-            p.setColor(Color.rgb(
-                    40,
-                    150,
-                    220
-            ));
-
-            c.drawRect(
-                    1800,
-                    350,
-                    2600,
-                    450,
-                    p
-            );
-
-            // grass details
-
-            p.setColor(Color.rgb(
-                    30,
-                    120,
-                    40
-            ));
-
-            for (int x = 0; x < 13000; x += 35) {
-
-                c.drawRect(
-                        x,
-                        345,
-                        x + 5,
-                        355,
-                        p
                 );
             }
         }
 
-        void drawBlocks(Canvas c) {
+        // ---------------- WEAPON ----------------
 
-            for (Block b : blocks) {
-
-                if (b.x < cameraX - 100 ||
-                        b.x > cameraX + getWidth() + 100)
-                    continue;
-
-                if (b.type < 65) {
-
-                    p.setColor(Color.rgb(
-                            105,
-                            70,
-                            40
-                    ));
-
-                } else if (b.type < 85) {
-
-                    p.setColor(Color.GRAY);
-
-                } else {
-
-                    p.setColor(Color.DKGRAY);
-                }
-
-                c.drawRect(
-                        b.x,
-                        b.y,
-                        b.x + 38,
-                        b.y + 38,
-                        p
-                );
-            }
-        }
-
-        void drawTrees(Canvas c) {
-
-            for (Tree t : trees) {
-
-                if (t.x < -500)
-                    continue;
-
-                p.setColor(Color.rgb(
-                        100,
-                        60,
-                        30
-                ));
-
-                c.drawRect(
-                        t.x - 12,
-                        275,
-                        t.x + 12,
-                        350,
-                        p
-                );
-
-                p.setColor(Color.rgb(
-                        30,
-                        135,
-                        45
-                ));
-
-                c.drawCircle(
-                        t.x,
-                        245,
-                        42,
-                        p
-                );
-
-                c.drawCircle(
-                        t.x - 30,
-                        265,
-                        30,
-                        p
-                );
-
-                c.drawCircle(
-                        t.x + 30,
-                        265,
-                        30,
-                        p
-                );
-            }
-        }
-
-        void drawRocks(Canvas c) {
-
-            for (Rock r : rocks) {
-
-                if (r.x < -500)
-                    continue;
-
-                p.setColor(Color.GRAY);
-
-                c.drawCircle(
-                        r.x,
-                        r.y,
-                        22,
-                        p
-                );
-
-                p.setColor(Color.LTGRAY);
-
-                c.drawCircle(
-                        r.x - 7,
-                        r.y - 7,
-                        5,
-                        p
-                );
-            }
-        }
-
-        void drawEnemies(Canvas c) {
-
-            for (Enemy e : enemies) {
-
-                if (Math.abs(e.x - playerX) > 700)
-                    continue;
-
-                p.setColor(Color.rgb(
-                        80,
-                        210,
-                        80
-                ));
-
-                c.drawCircle(
-                        e.x,
-                        e.y,
-                        24,
-                        p
-                );
-
-                p.setColor(Color.BLACK);
-
-                c.drawCircle(
-                        e.x - 8,
-                        e.y - 6,
-                        4,
-                        p
-                );
-
-                c.drawCircle(
-                        e.x + 8,
-                        e.y - 6,
-                        4,
-                        p
-                );
-            }
-        }
-
-        void drawPlayer(Canvas c) {
-
-            // legs
+        void drawWeapon(Canvas c, int w, int h) {
 
             p.setColor(Color.DKGRAY);
 
             c.drawRect(
-                    playerX - 15,
-                    playerY,
-                    playerX - 3,
-                    playerY + 30,
-                    p
+                w / 2 - 70,
+                h - 160,
+                w / 2 + 70,
+                h,
+                p
             );
+
+            p.setColor(Color.GRAY);
 
             c.drawRect(
-                    playerX + 3,
-                    playerY,
-                    playerX + 15,
-                    playerY + 30,
-                    p
+                w / 2 - 20,
+                h - 245,
+                w / 2 + 20,
+                h - 100,
+                p
             );
-
-            // body
-
-            p.setColor(Color.rgb(
-                    40,
-                    100,
-                    220
-            ));
-
-            c.drawRect(
-                    playerX - 18,
-                    playerY - 45,
-                    playerX + 18,
-                    playerY,
-                    p
-            );
-
-            // head
-
-            p.setColor(Color.rgb(
-                    245,
-                    190,
-                    140
-            ));
-
-            c.drawCircle(
-                    playerX,
-                    playerY - 62,
-                    20,
-                    p
-            );
-
-            // weapon
-
-            if (attacking) {
-
-                p.setColor(Color.LTGRAY);
-
-                c.drawRect(
-                        playerX + 15,
-                        playerY - 35,
-                        playerX + 65,
-                        playerY - 28,
-                        p
-                );
-            }
         }
 
-        void updateGame() {
+        // ---------------- HUD ----------------
 
-            // movement
+        void drawHUD(Canvas c, int w, int h) {
 
-            if (left)
-                velocityX = -5;
-
-            else if (right)
-                velocityX = 5;
-
-            else
-                velocityX *= 0.75f;
-
-            playerX += velocityX;
-
-            // gravity
-
-            velocityY += 0.65f;
-
-            playerY += velocityY;
-
-            if (playerY >= 350) {
-
-                playerY = 350;
-                velocityY = 0;
-
-                grounded = true;
-            }
-
-            if (jumping && grounded) {
-
-                velocityY = -13;
-
-                grounded = false;
-            }
-
-            // attack
-
-            if (attacking) {
-
-                attackEnemies();
-
-                attacking = false;
-            }
-
-            // enemies
-
-            for (Enemy e : enemies) {
-
-                if (e.x < -500)
-                    continue;
-
-                if (Math.abs(e.x - playerX) < 600) {
-
-                    if (e.x < playerX)
-                        e.x += 1.2f;
-                    else
-                        e.x -= 1.2f;
-
-                    if (Math.abs(e.x - playerX) < 45) {
-
-                        if (gameTime % 60 == 0)
-                            health -= 5;
-                    }
-                }
-            }
-
-            // hunger
-
-            if (gameTime % 300 == 0) {
-
-                hunger--;
-
-                if (hunger < 0)
-                    hunger = 0;
-            }
-
-            if (hunger == 0 &&
-                    gameTime % 60 == 0) {
-
-                health--;
-            }
-
-            // respawn
-
-            if (health <= 0) {
-
-                health = 100;
-                hunger = 100;
-
-                playerX = 500;
-                playerY = 300;
-            }
-        }
-
-        void attackEnemies() {
-
-            for (Enemy e : enemies) {
-
-                if (Math.abs(e.x - playerX) < 100) {
-
-                    e.x = -1000;
-                }
-            }
-        }
-
-        void mine() {
-
-            for (Tree t : trees) {
-
-                if (Math.abs(t.x - playerX) < 80) {
-
-                    wood += 3;
-                    t.x = -1000;
-
-                    return;
-                }
-            }
-
-            for (Rock r : rocks) {
-
-                if (Math.abs(r.x - playerX) < 80) {
-
-                    stone += 2;
-
-                    r.x = -1000;
-
-                    return;
-                }
-            }
-        }
-
-        void eat() {
-
-            if (food > 0 &&
-                    hunger < 100) {
-
-                food--;
-
-                hunger += 30;
-
-                if (hunger > 100)
-                    hunger = 100;
-            }
-        }
-
-        void craft() {
-
-            if (wood >= 4 &&
-                    stone >= 2) {
-
-                wood -= 4;
-                stone -= 2;
-
-                food++;
-            }
-        }
-
-        void drawInterface(
-                Canvas c,
-                int w,
-                int h) {
-
-            // stats panel
-
-            p.setColor(Color.argb(
-                    190,
-                    0,
-                    0,
-                    0
-            ));
+            p.setColor(Color.argb(190, 0, 0, 0));
 
             c.drawRoundRect(
-                    15,
-                    15,
-                    330,
-                    135,
-                    15,
-                    15,
-                    p
+                15, 15, 300, 115,
+                15, 15, p
             );
 
             p.setColor(Color.WHITE);
-            p.setTextSize(20);
+            p.setTextSize(22);
 
             c.drawText(
-                    "HP: " + health,
-                    30,
-                    42,
-                    p
+                "HEALTH: " + hp,
+                30, 45, p
             );
 
             c.drawText(
-                    "Hunger: " + hunger,
-                    30,
-                    68,
-                    p
+                "AMMO: " + ammo,
+                30, 73, p
             );
 
             c.drawText(
-                    "Wood: " + wood,
-                    30,
-                    94,
-                    p
+                "KILLS: " + kills +
+                "/" + enemies.size(),
+                30, 101, p
             );
+        }
 
-            c.drawText(
-                    "Stone: " + stone +
-                            "  Food: " + food,
-                    30,
-                    120,
-                    p
-            );
+        // =========================================================
+        // EASY TABLET CONTROLS
+        // =========================================================
 
-            // BIG TABLET CONTROLS
+        void drawControls(Canvas c, int w, int h) {
 
-            float size = Math.min(
-                    110,
-                    Math.max(80, w * 0.10f)
+            float s = Math.max(
+                105,
+                Math.min(150, w * .14f)
             );
 
             float gap = 18;
 
             float bottom = h - 25;
 
-            // left
+            // LEFT MOVEMENT
 
-            drawButton(
-                    c,
-                    25,
-                    bottom - size,
-                    size,
-                    "◀"
+            button(
+                c,
+                25,
+                bottom - s,
+                s,
+                "◀"
             );
 
-            // right
-
-            drawButton(
-                    c,
-                    25 + size + gap,
-                    bottom - size,
-                    size,
-                    "▶"
+            button(
+                c,
+                25 + s + gap,
+                bottom - s,
+                s,
+                "▶"
             );
 
-            // jump
+            // RIGHT SIDE
 
-            drawButton(
-                    c,
-                    w - size - 25,
-                    bottom - size * 2 - gap,
-                    size,
-                    "JUMP"
+            button(
+                c,
+                w - s - 25,
+                bottom - s * 2 - gap,
+                s,
+                "JUMP"
             );
 
-            // attack/mine
-
-            drawButton(
-                    c,
-                    w - size - 25,
-                    bottom - size,
-                    size,
-                    "MINE"
+            button(
+                c,
+                w - s - 25,
+                bottom - s,
+                s,
+                "FIRE"
             );
 
-            // use
-
-            drawButton(
-                    c,
-                    w - size * 2 - gap - 25,
-                    bottom - size,
-                    size,
-                    "USE"
-            );
-
-            // craft
-
-            drawButton(
-                    c,
-                    w - size * 2 - gap - 25,
-                    bottom - size * 2 - gap,
-                    size,
-                    "CRAFT"
+            button(
+                c,
+                w - s * 2 - gap - 25,
+                bottom - s,
+                s,
+                "TURN"
             );
         }
 
-        void drawButton(
-                Canvas c,
-                float x,
-                float y,
-                float size,
-                String text) {
+        void button(
+            Canvas c,
+            float x,
+            float y,
+            float s,
+            String text) {
 
             p.setColor(Color.argb(
-                    185,
-                    35,
-                    35,
-                    35
+                170, 25, 25, 25
             ));
 
             c.drawRoundRect(
-                    x,
-                    y,
-                    x + size,
-                    y + size,
-                    25,
-                    25,
-                    p
+                x, y,
+                x + s,
+                y + s,
+                28, 28, p
             );
 
             p.setColor(Color.WHITE);
-
             p.setStyle(Paint.Style.STROKE);
-            p.setStrokeWidth(3);
+            p.setStrokeWidth(4);
 
             c.drawRoundRect(
-                    x,
-                    y,
-                    x + size,
-                    y + size,
-                    25,
-                    25,
-                    p
+                x, y,
+                x + s,
+                y + s,
+                28, 28, p
             );
 
             p.setStyle(Paint.Style.FILL);
 
             p.setTextSize(
-                    text.length() <= 2
-                            ? size * 0.42f
-                            : size * 0.18f
+                text.length() <= 2
+                    ? s * .42f
+                    : s * .19f
             );
 
             float tw = p.measureText(text);
 
             c.drawText(
-                    text,
-                    x + (size - tw) / 2,
-                    y + size * 0.60f,
-                    p
+                text,
+                x + (s - tw) / 2,
+                y + s * .61f,
+                p
             );
         }
 
-        @Override
-        public boolean onTouchEvent(MotionEvent event) {
+        // =========================================================
+        // GAME UPDATE
+        // =========================================================
 
-            float x = event.getX();
-            float y = event.getY();
+        void update() {
 
-            int action = event.getActionMasked();
+            float speed = .045f;
 
-            int w = getWidth();
-            int h = getHeight();
+            float dx = 0;
+            float dy = 0;
 
-            float size = Math.min(
-                    110,
-                    Math.max(80, w * 0.10f)
-            );
+            if (!moveFingers.isEmpty()) {
 
-            float bottom = h - 25;
-            float gap = 18;
+                dx +=
+                    Math.cos(angle) * speed;
 
-            if (action == MotionEvent.ACTION_DOWN ||
-                    action == MotionEvent.ACTION_MOVE) {
+                dy +=
+                    Math.sin(angle) * speed;
+            }
 
-                left = false;
-                right = false;
-                jumping = false;
+            if (!turnLFingers.isEmpty())
+                angle -= .045f;
 
-                // LEFT
+            if (!turnRFingers.isEmpty())
+                angle += .045f;
 
-                if (x >= 25 &&
-                        x <= 25 + size &&
-                        y >= bottom - size)
-                    left = true;
+            move(dx, dy);
 
-                // RIGHT
+            if (!fireFingers.isEmpty()) {
 
-                if (x >= 25 + size + gap &&
-                        x <= 25 + size * 2 + gap &&
-                        y >= bottom - size)
-                    right = true;
+                long now =
+                    System.currentTimeMillis();
 
-                // JUMP
+                if (now - lastShot > 280) {
 
-                if (x >= w - size - 25 &&
-                        x <= w - 25 &&
-                        y >= bottom - size * 2 - gap &&
-                        y <= bottom - size - gap)
-                    jumping = true;
+                    shoot();
 
-                // MINE / ATTACK
-
-                if (x >= w - size - 25 &&
-                        x <= w - 25 &&
-                        y >= bottom - size) {
-
-                    mine();
-                    attacking = true;
-                }
-
-                // USE FOOD
-
-                if (x >= w - size * 2 - gap - 25 &&
-                        x <= w - size - gap - 25 &&
-                        y >= bottom - size) {
-
-                    eat();
-                }
-
-                // CRAFT
-
-                if (x >= w - size * 2 - gap - 25 &&
-                        x <= w - size - gap - 25 &&
-                        y >= bottom - size * 2 - gap &&
-                        y <= bottom - size - gap) {
-
-                    craft();
+                    lastShot = now;
                 }
             }
 
-            if (action == MotionEvent.ACTION_UP ||
-                    action == MotionEvent.ACTION_CANCEL) {
+            enemyAI();
 
-                left = false;
-                right = false;
-                jumping = false;
+            if (kills >= enemies.size())
+                victory = true;
+        }
+
+        void move(float dx, float dy) {
+
+            if (!wall(px + dx, py))
+                px += dx;
+
+            if (!wall(px, py + dy))
+                py += dy;
+        }
+
+        boolean wall(float x, float y) {
+
+            int mx = (int)x;
+            int my = (int)y;
+
+            if (mx < 0 ||
+                my < 0 ||
+                mx >= 20 ||
+                my >= 20)
+                return true;
+
+            return map[my][mx] == 1;
+        }
+
+        // =========================================================
+        // SHOOT
+        // =========================================================
+
+        void shoot() {
+
+            if (ammo <= 0)
+                return;
+
+            ammo--;
+
+            Enemy target = null;
+            float closest = 999;
+
+            for (Enemy e : enemies) {
+
+                if (e.dead)
+                    continue;
+
+                float dx = e.x - px;
+                float dy = e.y - py;
+
+                float dist =
+                    (float)Math.sqrt(
+                        dx * dx + dy * dy
+                    );
+
+                float enemyAngle =
+                    (float)Math.atan2(
+                        dy, dx
+                    );
+
+                float difference =
+                    Math.abs(
+                        normalize(
+                            enemyAngle - angle
+                        )
+                    );
+
+                if (difference <
+                    Math.toRadians(8) &&
+                    dist < closest &&
+                    clearShot(e)) {
+
+                    target = e;
+                    closest = dist;
+                }
+            }
+
+            if (target != null) {
+
+                target.hp -= 25;
+
+                if (target.hp <= 0) {
+
+                    target.dead = true;
+                    kills++;
+                }
+            }
+        }
+
+        boolean clearShot(Enemy e) {
+
+            float dx = e.x - px;
+            float dy = e.y - py;
+
+            float dist =
+                (float)Math.sqrt(
+                    dx * dx + dy * dy
+                );
+
+            int steps =
+                (int)(dist * 20);
+
+            for (int i = 1; i < steps; i++) {
+
+                float t =
+                    i / (float)steps;
+
+                float x = px + dx * t;
+                float y = py + dy * t;
+
+                if (wall(x, y))
+                    return false;
             }
 
             return true;
         }
 
-        static class Tree {
+        // =========================================================
+        // HARD AI
+        // =========================================================
 
-            float x;
-            float y;
+        void enemyAI() {
 
-            Tree(float x, float y) {
-                this.x = x;
-                this.y = y;
+            for (Enemy e : enemies) {
+
+                if (e.dead)
+                    continue;
+
+                float dx = px - e.x;
+                float dy = py - e.y;
+
+                float dist =
+                    (float)Math.sqrt(
+                        dx * dx + dy * dy
+                    );
+
+                if (dist > 12)
+                    continue;
+
+                if (dist > 1.25f) {
+
+                    float nx = dx / dist;
+                    float ny = dy / dist;
+
+                    float strafe =
+                        (float)Math.sin(
+                            System.currentTimeMillis()
+                            / 250.0 +
+                            e.x
+                        );
+
+                    float speed =
+                        e.type == 0
+                            ? .018f
+                            : .024f;
+
+                    float mx =
+                        nx * speed -
+                        ny * strafe * speed;
+
+                    float my =
+                        ny * speed +
+                        nx * strafe * speed;
+
+                    if (!wall(e.x + mx, e.y))
+                        e.x += mx;
+
+                    if (!wall(e.x, e.y + my))
+                        e.y += my;
+                }
+
+                if (dist < 1.4f &&
+                    clearShot(e)) {
+
+                    long now =
+                        System.currentTimeMillis();
+
+                    if (now - e.lastAttack > 700) {
+
+                        hp -=
+                            e.type == 0
+                                ? 7
+                                : 11;
+
+                        e.lastAttack = now;
+
+                        if (hp <= 0)
+                            gameOver = true;
+                    }
+                }
             }
         }
 
-        static class Rock {
+        float normalize(float a) {
 
-            float x;
-            float y;
+            while (a > Math.PI)
+                a -= Math.PI * 2;
 
-            Rock(float x, float y) {
-                this.x = x;
-                this.y = y;
+            while (a < -Math.PI)
+                a += Math.PI * 2;
+
+            return a;
+        }
+
+        // =========================================================
+        // MULTI-TOUCH
+        // =========================================================
+
+        @Override
+        public boolean onTouchEvent(MotionEvent e) {
+
+            int action =
+                e.getActionMasked();
+
+            int index =
+                e.getActionIndex();
+
+            int id =
+                e.getPointerId(index);
+
+            if (action ==
+                MotionEvent.ACTION_DOWN ||
+                action ==
+                MotionEvent.ACTION_POINTER_DOWN) {
+
+                checkPointer(
+                    e.getX(index),
+                    e.getY(index),
+                    id
+                );
             }
+
+            if (action ==
+                MotionEvent.ACTION_UP ||
+                action ==
+                MotionEvent.ACTION_POINTER_UP ||
+                action ==
+                MotionEvent.ACTION_CANCEL) {
+
+                moveFingers.remove(id);
+                fireFingers.remove(id);
+                turnLFingers.remove(id);
+                turnRFingers.remove(id);
+                jumpFingers.remove(id);
+            }
+
+            if (action ==
+                MotionEvent.ACTION_MOVE) {
+
+                // Re-check every finger.
+                moveFingers.clear();
+                fireFingers.clear();
+                turnLFingers.clear();
+                turnRFingers.clear();
+                jumpFingers.clear();
+
+                for (int i = 0;
+                     i < e.getPointerCount();
+                     i++) {
+
+                    checkPointer(
+                        e.getX(i),
+                        e.getY(i),
+                        e.getPointerId(i)
+                    );
+                }
+            }
+
+            return true;
+        }
+
+        void checkPointer(
+            float x,
+            float y,
+            int id) {
+
+            int w = getWidth();
+            int h = getHeight();
+
+            float s = Math.max(
+                105,
+                Math.min(150, w * .14f)
+            );
+
+            float bottom = h - 25;
+            float gap = 18;
+
+            // left
+
+            if (x >= 15 &&
+                x <= 35 + s &&
+                y >= bottom - s) {
+
+                moveFingers.add(id);
+            }
+
+            // right
+
+            if (x >= 20 + s &&
+                x <= 55 + s * 2 &&
+                y >= bottom - s) {
+
+                turnRFingers.add(id);
+            }
+
+            // jump
+
+            if (x >= w - s - 35 &&
+                x <= w - 10 &&
+                y >= bottom -
+                    s * 2 -
+                    gap &&
+                y <= bottom -
+                    s -
+                    gap) {
+
+                jumpFingers.add(id);
+            }
+
+            // fire
+
+            if (x >= w - s - 35 &&
+                x <= w - 10 &&
+                y >= bottom - s) {
+
+                fireFingers.add(id);
+            }
+
+            // turn
+
+            if (x >= w -
+                    s * 2 -
+                    gap -
+                    35 &&
+                x <= w -
+                    s -
+                    gap -
+                    15 &&
+                y >= bottom - s) {
+
+                turnRFingers.add(id);
+            }
+        }
+
+        // =========================================================
+        // END
+        // =========================================================
+
+        void drawEnd(
+            Canvas c,
+            int w,
+            int h,
+            boolean win) {
+
+            c.drawColor(Color.BLACK);
+
+            p.setColor(
+                win
+                    ? Color.YELLOW
+                    : Color.RED
+            );
+
+            p.setTextSize(48);
+
+            String text =
+                win
+                    ? "LEVEL CLEARED"
+                    : "GAME OVER";
+
+            c.drawText(
+                text,
+                w / 2 -
+                    p.measureText(text) / 2,
+                h / 2,
+                p
+            );
+
+            p.setColor(Color.WHITE);
+            p.setTextSize(22);
+
+            String score =
+                "KILLS: " + kills;
+
+            c.drawText(
+                score,
+                w / 2 -
+                    p.measureText(score) / 2,
+                h / 2 + 50,
+                p
+            );
         }
 
         static class Enemy {
@@ -970,27 +881,12 @@ public class MainActivity extends Activity {
             float x;
             float y;
 
-            Enemy(float x, float y) {
-                this.x = x;
-                this.y = y;
-            }
-        }
-
-        static class Block {
-
-            float x;
-            float y;
             int type;
+            int hp;
 
-            Block(
-                    float x,
-                    float y,
-                    int type) {
+            boolean dead = false;
 
-                this.x = x;
-                this.y = y;
-                this.type = type;
-            }
+            long lastAttack = 0;
         }
     }
 }
