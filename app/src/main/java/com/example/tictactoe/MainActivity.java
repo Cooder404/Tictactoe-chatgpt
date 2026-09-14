@@ -1,892 +1,1162 @@
-package com.example.doomai;
+package com.example.weapontester;
 
 import android.app.Activity;
 import android.os.Bundle;
 import android.graphics.*;
+import android.content.Context;
 import android.view.*;
-import android.content.*;
-import java.util.*;
+import android.widget.*;
+import android.animation.*;
+import android.view.animation.DecelerateInterpolator;
 
 public class MainActivity extends Activity {
 
+    LinearLayout root;
+
+    TextView weaponText;
+    TextView ammoText;
+    TextView targetText;
+    TextView coinText;
+    TextView levelText;
+
+    ProgressBar levelBar;
+
+    Button[] slots = new Button[10];
+
+    String equippedWeapon = "Empty";
+
+    int ammo = 100;
+    int dummyHP = 999999;
+
+    int coins = 0;
+
+    int level = 1;
+    int xp = 0;
+
+    final int MAX_LEVEL = 30;
+    final int XP_PER_LEVEL = 100;
+
+    boolean revolverOwned = false;
+
+    StickmanView player;
+
     @Override
-    protected void onCreate(Bundle b) {
-        super.onCreate(b);
-        setContentView(new DoomGame(this));
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        showMenu();
     }
 
-    public static class DoomGame extends View {
+    // =========================
+    // MAIN MENU
+    // =========================
 
-        Paint p = new Paint();
-        Random random = new Random();
+    void showMenu() {
 
-        float px = 3.5f;
-        float py = 3.5f;
-        float angle = 0;
+        root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(30, 30, 30, 30);
+        root.setGravity(Gravity.CENTER);
+        root.setBackgroundColor(Color.rgb(235, 235, 235));
 
-        int hp = 100;
-        int ammo = 50;
-        int kills = 0;
+        TextView title = new TextView(this);
 
-        boolean gameOver = false;
-        boolean victory = false;
+        title.setText("WEAPON TESTER");
+        title.setTextSize(38);
+        title.setTextColor(Color.DKGRAY);
+        title.setGravity(Gravity.CENTER);
 
-        long lastShot = 0;
+        root.addView(title, new LinearLayout.LayoutParams(
+                -1, 130
+        ));
 
-        int[][] map = {
-            {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
-            {1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,1},
-            {1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,1,1,1,0,1},
-            {1,0,1,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,1},
-            {1,0,1,0,1,1,1,1,1,0,1,1,1,0,1,0,1,1,0,1},
-            {1,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,1},
-            {1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,0,1,0,1,1},
-            {1,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,1},
-            {1,0,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,0,1},
-            {1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1},
-            {1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,0,1},
-            {1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,1},
-            {1,0,1,1,1,0,1,1,1,1,1,1,1,1,0,1,0,1,0,1},
-            {1,0,0,0,1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,1},
-            {1,1,1,0,1,1,1,1,1,1,1,1,0,1,0,1,1,1,0,1},
-            {1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1},
-            {1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1},
-            {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-            {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-            {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}
+        Button play = new Button(this);
+
+        play.setText("PLAY");
+        play.setTextSize(30);
+
+        root.addView(play, new LinearLayout.LayoutParams(
+                -1, 120
+        ));
+
+        Button shop = new Button(this);
+
+        shop.setText("SHOP");
+        shop.setTextSize(30);
+
+        root.addView(shop, new LinearLayout.LayoutParams(
+                -1, 120
+        ));
+
+        TextView coinsMenu = new TextView(this);
+
+        coinsMenu.setText("Coins: " + coins);
+        coinsMenu.setTextSize(25);
+        coinsMenu.setTextColor(Color.rgb(180, 130, 0));
+        coinsMenu.setGravity(Gravity.CENTER);
+
+        root.addView(coinsMenu, new LinearLayout.LayoutParams(
+                -1, 80
+        ));
+
+        play.setOnClickListener(v -> buildGame());
+
+        shop.setOnClickListener(v -> openShop());
+
+        setContentView(root);
+    }
+
+    // =========================
+    // GAME
+    // =========================
+
+    void buildGame() {
+
+        root = new LinearLayout(this);
+
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(15, 15, 15, 15);
+
+        root.setBackgroundColor(
+                Color.rgb(235, 235, 235)
+        );
+
+        // TOP BAR
+
+        FrameLayout topBar = new FrameLayout(this);
+
+        levelText = new TextView(this);
+
+        levelText.setText(
+                "LEVEL " + level
+        );
+
+        levelText.setTextSize(20);
+        levelText.setTextColor(Color.DKGRAY);
+        levelText.setGravity(Gravity.CENTER);
+
+        FrameLayout.LayoutParams lp =
+                new FrameLayout.LayoutParams(
+                        260, 55
+                );
+
+        lp.gravity =
+                Gravity.TOP | Gravity.RIGHT;
+
+        topBar.addView(levelText, lp);
+
+        levelBar = new ProgressBar(
+                this,
+                null,
+                android.R.attr.progressBarStyleHorizontal
+        );
+
+        levelBar.setMax(XP_PER_LEVEL);
+        levelBar.setProgress(xp);
+
+        FrameLayout.LayoutParams bp =
+                new FrameLayout.LayoutParams(
+                        260, 35
+                );
+
+        bp.gravity =
+                Gravity.TOP | Gravity.RIGHT;
+
+        bp.topMargin = 55;
+
+        topBar.addView(levelBar, bp);
+
+        root.addView(
+                topBar,
+                new LinearLayout.LayoutParams(
+                        -1, 100
+                )
+        );
+
+        // COINS
+
+        coinText = new TextView(this);
+
+        coinText.setText(
+                "Coins: " + coins
+        );
+
+        coinText.setTextSize(23);
+        coinText.setTextColor(
+                Color.rgb(170, 120, 0)
+        );
+
+        coinText.setGravity(Gravity.CENTER);
+
+        root.addView(
+                coinText,
+                new LinearLayout.LayoutParams(
+                        -1, 60
+                )
+        );
+
+        // WEAPON
+
+        weaponText = new TextView(this);
+
+        weaponText.setText(
+                "Equipped: Empty"
+        );
+
+        weaponText.setTextSize(24);
+        weaponText.setTextColor(Color.DKGRAY);
+        weaponText.setGravity(Gravity.CENTER);
+
+        root.addView(
+                weaponText,
+                new LinearLayout.LayoutParams(
+                        -1, 75
+                )
+        );
+
+        // AMMO
+
+        ammoText = new TextView(this);
+
+        ammoText.setText(
+                "Ammo: 100"
+        );
+
+        ammoText.setTextSize(22);
+        ammoText.setTextColor(Color.DKGRAY);
+        ammoText.setGravity(Gravity.CENTER);
+
+        root.addView(
+                ammoText,
+                new LinearLayout.LayoutParams(
+                        -1, 55
+                )
+        );
+
+        // GAME AREA
+
+        FrameLayout gameArea =
+                new FrameLayout(this);
+
+        gameArea.setBackgroundColor(
+                Color.rgb(225, 225, 225)
+        );
+
+        // LAMP
+
+        LampView lamp =
+                new LampView(this);
+
+        gameArea.addView(
+                lamp,
+                new FrameLayout.LayoutParams(
+                        -1, 260
+                )
+        );
+
+        // PLAYER
+
+        player =
+                new StickmanView(this);
+
+        FrameLayout.LayoutParams playerLP =
+                new FrameLayout.LayoutParams(
+                        -1, 300
+                );
+
+        playerLP.gravity =
+                Gravity.CENTER;
+
+        gameArea.addView(
+                player,
+                playerLP
+        );
+
+        // DUMMY
+
+        DummyView dummy =
+                new DummyView(this);
+
+        FrameLayout.LayoutParams dummyLP =
+                new FrameLayout.LayoutParams(
+                        180, 260
+                );
+
+        dummyLP.gravity =
+                Gravity.RIGHT | Gravity.CENTER_VERTICAL;
+
+        dummyLP.rightMargin = 80;
+
+        gameArea.addView(
+                dummy,
+                dummyLP
+        );
+
+        root.addView(
+                gameArea,
+                new LinearLayout.LayoutParams(
+                        -1, 330
+                )
+        );
+
+        // DUMMY HP
+
+        targetText = new TextView(this);
+
+        targetText.setText(
+                "DUMMY HP: 999999"
+        );
+
+        targetText.setTextSize(22);
+        targetText.setTextColor(Color.DKGRAY);
+        targetText.setGravity(Gravity.CENTER);
+
+        root.addView(
+                targetText,
+                new LinearLayout.LayoutParams(
+                        -1, 60
+                )
+        );
+
+        // FIRE
+
+        Button fire =
+                new Button(this);
+
+        fire.setText("FIRE");
+        fire.setTextSize(28);
+
+        fire.setOnClickListener(
+                v -> fireWeapon()
+        );
+
+        root.addView(
+                fire,
+                new LinearLayout.LayoutParams(
+                        -1, 110
+                )
+        );
+
+        // INVENTORY
+
+        TextView inventoryTitle =
+                new TextView(this);
+
+        inventoryTitle.setText(
+                "INVENTORY"
+        );
+
+        inventoryTitle.setTextSize(24);
+        inventoryTitle.setTextColor(Color.DKGRAY);
+        inventoryTitle.setGravity(Gravity.CENTER);
+
+        root.addView(
+                inventoryTitle,
+                new LinearLayout.LayoutParams(
+                        -1, 60
+                )
+        );
+
+        GridLayout inventory =
+                new GridLayout(this);
+
+        inventory.setColumnCount(5);
+        inventory.setRowCount(2);
+
+        String[] weapons = {
+
+                "MACHINE GUN",
+                "FISHING ROD",
+                "SHOTGUN",
+                "RIFLE",
+                "LASER",
+
+                "SMG",
+                "SNIPER",
+                "ROCKET",
+                "PLASMA",
+                "EMPTY"
         };
 
-        ArrayList<Enemy> enemies = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
 
-        // Finger states
-        HashSet<Integer> moveFingers = new HashSet<>();
-        HashSet<Integer> fireFingers = new HashSet<>();
-        HashSet<Integer> turnLFingers = new HashSet<>();
-        HashSet<Integer> turnRFingers = new HashSet<>();
-        HashSet<Integer> jumpFingers = new HashSet<>();
+            final int slot = i;
 
-        public DoomGame(Context c) {
-            super(c);
+            slots[i] =
+                    new Button(this);
 
-            p.setAntiAlias(false);
+            slots[i].setText(
+                    "SLOT " +
+                    (i + 1) +
+                    "\n" +
+                    weapons[i]
+            );
 
-            spawn(5.5f, 3.5f, 0);
-            spawn(10.5f, 3.5f, 1);
-            spawn(16.5f, 3.5f, 0);
-            spawn(4.5f, 7.5f, 1);
-            spawn(11.5f, 7.5f, 0);
-            spawn(17.5f, 9.5f, 1);
-            spawn(5.5f, 13.5f, 0);
-            spawn(15.5f, 15.5f, 1);
+            slots[i].setTextSize(14);
+
+            GridLayout.LayoutParams p =
+                    new GridLayout.LayoutParams();
+
+            p.width = 0;
+            p.height = 115;
+
+            p.columnSpec =
+                    GridLayout.spec(
+                            i % 5, 1f
+                    );
+
+            p.rowSpec =
+                    GridLayout.spec(
+                            i / 5, 1f
+                    );
+
+            inventory.addView(
+                    slots[i], p
+            );
+
+            slots[i].setOnClickListener(
+                    v -> equipWeapon(
+                            weapons[slot],
+                            slot
+                    )
+            );
         }
 
-        void spawn(float x, float y, int type) {
-            Enemy e = new Enemy();
-            e.x = x;
-            e.y = y;
-            e.type = type;
-            e.hp = type == 0 ? 45 : 75;
-            enemies.add(e);
+        root.addView(
+                inventory,
+                new LinearLayout.LayoutParams(
+                        -1, 250
+                )
+        );
+
+        // CONTROLS
+
+        LinearLayout controls =
+                new LinearLayout(this);
+
+        controls.setGravity(
+                Gravity.CENTER
+        );
+
+        Button left =
+                new Button(this);
+
+        left.setText("◀");
+        left.setTextSize(32);
+
+        Button jump =
+                new Button(this);
+
+        jump.setText("▲");
+        jump.setTextSize(32);
+
+        Button right =
+                new Button(this);
+
+        right.setText("▶");
+        right.setTextSize(32);
+
+        controls.addView(
+                left,
+                new LinearLayout.LayoutParams(
+                        0, 100, 1
+                )
+        );
+
+        controls.addView(
+                jump,
+                new LinearLayout.LayoutParams(
+                        0, 100, 1
+                )
+        );
+
+        controls.addView(
+                right,
+                new LinearLayout.LayoutParams(
+                        0, 100, 1
+                )
+        );
+
+        root.addView(controls);
+
+        jump.setOnClickListener(
+                v -> player.jump()
+        );
+
+        setContentView(root);
+    }
+
+    // =========================
+    // EQUIP
+    // =========================
+
+    void equipWeapon(
+            String weapon,
+            int slot) {
+
+        if (weapon.equals("REVOLVER")
+                && !revolverOwned) {
+
+            weaponText.setText(
+                    "Buy the Revolver first!"
+            );
+
+            return;
         }
 
-        @Override
-        protected void onDraw(Canvas c) {
+        equippedWeapon = weapon;
 
-            int w = getWidth();
-            int h = getHeight();
+        if (weapon.equals("EMPTY")) {
 
-            if (gameOver) {
-                drawEnd(c, w, h, false);
-                postInvalidateDelayed(16);
-                return;
-            }
+            weaponText.setText(
+                    "Equipped: Empty"
+            );
 
-            if (victory) {
-                drawEnd(c, w, h, true);
-                postInvalidateDelayed(16);
-                return;
-            }
+            ammo = 0;
 
-            drawWorld(c, w, h);
-            drawWeapon(c, w, h);
-            drawHUD(c, w, h);
-            drawControls(c, w, h);
+        } else if (
+                weapon.equals("FISHING ROD")) {
 
-            update();
+            weaponText.setText(
+                    "Equipped: FISHING ROD\n" +
+                    "Skill 1: CAST"
+            );
 
-            postInvalidateDelayed(16);
+            ammo = 0;
+
+        } else {
+
+            weaponText.setText(
+                    "Equipped: " +
+                    weapon +
+                    "\nSlot " +
+                    (slot + 1)
+            );
+
+            ammo = 100;
         }
 
-        // ---------------- WORLD ----------------
+        updateAmmo();
 
-        void drawWorld(Canvas c, int w, int h) {
+        for (int i = 0; i < 10; i++) {
 
-            p.setColor(Color.rgb(35, 40, 60));
-            c.drawRect(0, 0, w, h / 2, p);
+            slots[i].setTextColor(
+                    Color.DKGRAY
+            );
+        }
 
-            p.setColor(Color.rgb(40, 35, 35));
-            c.drawRect(0, h / 2, w, h, p);
+        slots[slot].setTextColor(
+                Color.rgb(200, 130, 0)
+        );
+    }
 
-            float fov = (float)Math.toRadians(70);
+    // =========================
+    // FIRE
+    // =========================
 
-            for (int x = 0; x < w; x += 3) {
+    void fireWeapon() {
 
-                float ra =
-                    angle - fov / 2 +
-                    fov * x / (float)w;
+        if (equippedWeapon.equals(
+                "FISHING ROD")) {
 
-                float rx = (float)Math.cos(ra);
-                float ry = (float)Math.sin(ra);
+            weaponText.setText(
+                    "FISHING ROD\n" +
+                    "Skill 1: CAST\n" +
+                    "CAST!"
+            );
 
-                float dist = 0;
+            targetText.setText(
+                    "Fishing line cast!"
+            );
 
-                while (dist < 18) {
+            return;
+        }
 
-                    dist += .035f;
+        if (equippedWeapon.equals(
+                "Empty")) {
 
-                    int mx = (int)(px + rx * dist);
-                    int my = (int)(py + ry * dist);
+            weaponText.setText(
+                    "Equip a weapon first!"
+            );
 
-                    if (mx < 0 ||
-                        my < 0 ||
-                        mx >= 20 ||
-                        my >= 20) {
-                        break;
+            return;
+        }
+
+        if (ammo <= 0) {
+
+            ammoText.setText(
+                    "OUT OF AMMO"
+            );
+
+            return;
+        }
+
+        ammo--;
+
+        int damage = 10;
+
+        if (equippedWeapon.equals(
+                "REVOLVER"))
+            damage = 40;
+
+        if (equippedWeapon.equals(
+                "SHOTGUN"))
+            damage = 30;
+
+        if (equippedWeapon.equals(
+                "SNIPER"))
+            damage = 80;
+
+        if (equippedWeapon.equals(
+                "ROCKET"))
+            damage = 100;
+
+        hitDummy(damage);
+
+        updateAmmo();
+    }
+
+    // =========================
+    // DUMMY
+    // =========================
+
+    void hitDummy(int damage) {
+
+        dummyHP -= damage;
+
+        if (dummyHP < 0)
+            dummyHP = 0;
+
+        coins += 50;
+
+        addXP(25);
+
+        coinText.setText(
+                "Coins: " + coins
+        );
+
+        targetText.setText(
+                "DUMMY HP: " +
+                dummyHP
+        );
+    }
+
+    // =========================
+    // XP
+    // =========================
+
+    void addXP(int amount) {
+
+        if (level >= MAX_LEVEL)
+            return;
+
+        xp += amount;
+
+        while (
+                xp >= XP_PER_LEVEL &&
+                level < MAX_LEVEL) {
+
+            xp -= XP_PER_LEVEL;
+
+            level++;
+
+            Toast.makeText(
+                    this,
+                    "LEVEL UP! Level " +
+                    level,
+                    Toast.LENGTH_SHORT
+            ).show();
+        }
+
+        if (level >= MAX_LEVEL) {
+
+            level = MAX_LEVEL;
+            xp = XP_PER_LEVEL;
+        }
+
+        levelText.setText(
+                "LEVEL " + level
+        );
+
+        levelBar.setProgress(
+                xp
+        );
+    }
+
+    // =========================
+    // SHOP
+    // =========================
+
+    void openShop() {
+
+        root =
+                new LinearLayout(this);
+
+        root.setOrientation(
+                LinearLayout.VERTICAL
+        );
+
+        root.setPadding(
+                30, 30, 30, 30
+        );
+
+        root.setBackgroundColor(
+                Color.rgb(
+                        235, 235, 235
+                )
+        );
+
+        TextView title =
+                new TextView(this);
+
+        title.setText(
+                "WEAPON SHOP"
+        );
+
+        title.setTextSize(34);
+        title.setTextColor(Color.DKGRAY);
+        title.setGravity(
+                Gravity.CENTER
+        );
+
+        root.addView(
+                title,
+                new LinearLayout.LayoutParams(
+                        -1, 100
+                )
+        );
+
+        TextView coinsView =
+                new TextView(this);
+
+        coinsView.setText(
+                "Coins: " + coins
+        );
+
+        coinsView.setTextSize(25);
+        coinsView.setTextColor(
+                Color.rgb(170, 120, 0)
+        );
+
+        coinsView.setGravity(
+                Gravity.CENTER
+        );
+
+        root.addView(
+                coinsView,
+                new LinearLayout.LayoutParams(
+                        -1, 70
+                )
+        );
+
+        Button revolver =
+                new Button(this);
+
+        revolver.setText(
+                "REVOLVER\n" +
+                "Damage: 40\n" +
+                "Price: 300 Coins"
+        );
+
+        revolver.setTextSize(20);
+
+        root.addView(
+                revolver,
+                new LinearLayout.LayoutParams(
+                        -1, 160
+                )
+        );
+
+        if (revolverOwned) {
+
+            revolver.setText(
+                    "REVOLVER\n" +
+                    "OWNED\n" +
+                    "Damage: 40"
+            );
+        }
+
+        revolver.setOnClickListener(
+                v -> {
+
+                    if (revolverOwned) {
+
+                        Toast.makeText(
+                                this,
+                                "Already owned!",
+                                Toast.LENGTH_SHORT
+                        ).show();
+
+                        return;
                     }
 
-                    if (map[my][mx] == 1)
-                        break;
-                }
+                    if (coins >= 300) {
 
-                float corrected =
-                    dist *
-                    (float)Math.cos(ra - angle);
+                        coins -= 300;
 
-                if (corrected < .1f)
-                    corrected = .1f;
+                        revolverOwned = true;
 
-                int height =
-                    (int)(h * .8f / corrected);
-
-                if (height > h)
-                    height = h;
-
-                int top =
-                    h / 2 - height / 2;
-
-                int bottom =
-                    h / 2 + height / 2;
-
-                int shade =
-                    (int)(170 / (1 + corrected * .08f));
-
-                if (shade < 35)
-                    shade = 35;
-
-                p.setColor(Color.rgb(
-                    shade,
-                    shade / 2,
-                    shade / 3
-                ));
-
-                c.drawRect(
-                    x,
-                    top,
-                    x + 3,
-                    bottom,
-                    p
-                );
-            }
-
-            drawEnemies(c, w, h);
-        }
-
-        void drawEnemies(Canvas c, int w, int h) {
-
-            for (Enemy e : enemies) {
-
-                if (e.dead)
-                    continue;
-
-                float dx = e.x - px;
-                float dy = e.y - py;
-
-                float dist =
-                    (float)Math.sqrt(
-                        dx * dx + dy * dy
-                    );
-
-                if (dist > 15)
-                    continue;
-
-                float a =
-                    (float)Math.atan2(dy, dx);
-
-                float relative =
-                    normalize(a - angle);
-
-                float fov =
-                    (float)Math.toRadians(70);
-
-                if (Math.abs(relative) > fov / 2)
-                    continue;
-
-                float sx =
-                    w / 2f +
-                    relative / fov * w;
-
-                float size =
-                    h * .7f / dist;
-
-                p.setColor(
-                    e.type == 0
-                        ? Color.rgb(190,45,45)
-                        : Color.rgb(70,190,70)
-                );
-
-                c.drawCircle(
-                    sx,
-                    h / 2f,
-                    size * .28f,
-                    p
-                );
-
-                p.setColor(Color.DKGRAY);
-
-                c.drawRect(
-                    sx - size * .23f,
-                    h / 2f,
-                    sx + size * .23f,
-                    h / 2f + size * .45f,
-                    p
-                );
-
-                p.setColor(Color.YELLOW);
-
-                c.drawCircle(
-                    sx - size * .09f,
-                    h / 2f - size * .06f,
-                    size * .04f,
-                    p
-                );
-
-                c.drawCircle(
-                    sx + size * .09f,
-                    h / 2f - size * .06f,
-                    size * .04f,
-                    p
-                );
-            }
-        }
-
-        // ---------------- WEAPON ----------------
-
-        void drawWeapon(Canvas c, int w, int h) {
-
-            p.setColor(Color.DKGRAY);
-
-            c.drawRect(
-                w / 2 - 70,
-                h - 160,
-                w / 2 + 70,
-                h,
-                p
-            );
-
-            p.setColor(Color.GRAY);
-
-            c.drawRect(
-                w / 2 - 20,
-                h - 245,
-                w / 2 + 20,
-                h - 100,
-                p
-            );
-        }
-
-        // ---------------- HUD ----------------
-
-        void drawHUD(Canvas c, int w, int h) {
-
-            p.setColor(Color.argb(190, 0, 0, 0));
-
-            c.drawRoundRect(
-                15, 15, 300, 115,
-                15, 15, p
-            );
-
-            p.setColor(Color.WHITE);
-            p.setTextSize(22);
-
-            c.drawText(
-                "HEALTH: " + hp,
-                30, 45, p
-            );
-
-            c.drawText(
-                "AMMO: " + ammo,
-                30, 73, p
-            );
-
-            c.drawText(
-                "KILLS: " + kills +
-                "/" + enemies.size(),
-                30, 101, p
-            );
-        }
-
-        // =========================================================
-        // EASY TABLET CONTROLS
-        // =========================================================
-
-        void drawControls(Canvas c, int w, int h) {
-
-            float s = Math.max(
-                105,
-                Math.min(150, w * .14f)
-            );
-
-            float gap = 18;
-
-            float bottom = h - 25;
-
-            // LEFT MOVEMENT
-
-            button(
-                c,
-                25,
-                bottom - s,
-                s,
-                "◀"
-            );
-
-            button(
-                c,
-                25 + s + gap,
-                bottom - s,
-                s,
-                "▶"
-            );
-
-            // RIGHT SIDE
-
-            button(
-                c,
-                w - s - 25,
-                bottom - s * 2 - gap,
-                s,
-                "JUMP"
-            );
-
-            button(
-                c,
-                w - s - 25,
-                bottom - s,
-                s,
-                "FIRE"
-            );
-
-            button(
-                c,
-                w - s * 2 - gap - 25,
-                bottom - s,
-                s,
-                "TURN"
-            );
-        }
-
-        void button(
-            Canvas c,
-            float x,
-            float y,
-            float s,
-            String text) {
-
-            p.setColor(Color.argb(
-                170, 25, 25, 25
-            ));
-
-            c.drawRoundRect(
-                x, y,
-                x + s,
-                y + s,
-                28, 28, p
-            );
-
-            p.setColor(Color.WHITE);
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeWidth(4);
-
-            c.drawRoundRect(
-                x, y,
-                x + s,
-                y + s,
-                28, 28, p
-            );
-
-            p.setStyle(Paint.Style.FILL);
-
-            p.setTextSize(
-                text.length() <= 2
-                    ? s * .42f
-                    : s * .19f
-            );
-
-            float tw = p.measureText(text);
-
-            c.drawText(
-                text,
-                x + (s - tw) / 2,
-                y + s * .61f,
-                p
-            );
-        }
-
-        // =========================================================
-        // GAME UPDATE
-        // =========================================================
-
-        void update() {
-
-            float speed = .045f;
-
-            float dx = 0;
-            float dy = 0;
-
-            if (!moveFingers.isEmpty()) {
-
-                dx +=
-                    Math.cos(angle) * speed;
-
-                dy +=
-                    Math.sin(angle) * speed;
-            }
-
-            if (!turnLFingers.isEmpty())
-                angle -= .045f;
-
-            if (!turnRFingers.isEmpty())
-                angle += .045f;
-
-            move(dx, dy);
-
-            if (!fireFingers.isEmpty()) {
-
-                long now =
-                    System.currentTimeMillis();
-
-                if (now - lastShot > 280) {
-
-                    shoot();
-
-                    lastShot = now;
-                }
-            }
-
-            enemyAI();
-
-            if (kills >= enemies.size())
-                victory = true;
-        }
-
-        void move(float dx, float dy) {
-
-            if (!wall(px + dx, py))
-                px += dx;
-
-            if (!wall(px, py + dy))
-                py += dy;
-        }
-
-        boolean wall(float x, float y) {
-
-            int mx = (int)x;
-            int my = (int)y;
-
-            if (mx < 0 ||
-                my < 0 ||
-                mx >= 20 ||
-                my >= 20)
-                return true;
-
-            return map[my][mx] == 1;
-        }
-
-        // =========================================================
-        // SHOOT
-        // =========================================================
-
-        void shoot() {
-
-            if (ammo <= 0)
-                return;
-
-            ammo--;
-
-            Enemy target = null;
-            float closest = 999;
-
-            for (Enemy e : enemies) {
-
-                if (e.dead)
-                    continue;
-
-                float dx = e.x - px;
-                float dy = e.y - py;
-
-                float dist =
-                    (float)Math.sqrt(
-                        dx * dx + dy * dy
-                    );
-
-                float enemyAngle =
-                    (float)Math.atan2(
-                        dy, dx
-                    );
-
-                float difference =
-                    Math.abs(
-                        normalize(
-                            enemyAngle - angle
-                        )
-                    );
-
-                if (difference <
-                    Math.toRadians(8) &&
-                    dist < closest &&
-                    clearShot(e)) {
-
-                    target = e;
-                    closest = dist;
-                }
-            }
-
-            if (target != null) {
-
-                target.hp -= 25;
-
-                if (target.hp <= 0) {
-
-                    target.dead = true;
-                    kills++;
-                }
-            }
-        }
-
-        boolean clearShot(Enemy e) {
-
-            float dx = e.x - px;
-            float dy = e.y - py;
-
-            float dist =
-                (float)Math.sqrt(
-                    dx * dx + dy * dy
-                );
-
-            int steps =
-                (int)(dist * 20);
-
-            for (int i = 1; i < steps; i++) {
-
-                float t =
-                    i / (float)steps;
-
-                float x = px + dx * t;
-                float y = py + dy * t;
-
-                if (wall(x, y))
-                    return false;
-            }
-
-            return true;
-        }
-
-        // =========================================================
-        // HARD AI
-        // =========================================================
-
-        void enemyAI() {
-
-            for (Enemy e : enemies) {
-
-                if (e.dead)
-                    continue;
-
-                float dx = px - e.x;
-                float dy = py - e.y;
-
-                float dist =
-                    (float)Math.sqrt(
-                        dx * dx + dy * dy
-                    );
-
-                if (dist > 12)
-                    continue;
-
-                if (dist > 1.25f) {
-
-                    float nx = dx / dist;
-                    float ny = dy / dist;
-
-                    float strafe =
-                        (float)Math.sin(
-                            System.currentTimeMillis()
-                            / 250.0 +
-                            e.x
+                        coinsView.setText(
+                                "Coins: " +
+                                coins
                         );
 
-                    float speed =
-                        e.type == 0
-                            ? .018f
-                            : .024f;
+                        revolver.setText(
+                                "REVOLVER\n" +
+                                "OWNED\n" +
+                                "Damage: 40"
+                        );
 
-                    float mx =
-                        nx * speed -
-                        ny * strafe * speed;
+                        Toast.makeText(
+                                this,
+                                "Revolver purchased!",
+                                Toast.LENGTH_SHORT
+                        ).show();
 
-                    float my =
-                        ny * speed +
-                        nx * strafe * speed;
+                    } else {
 
-                    if (!wall(e.x + mx, e.y))
-                        e.x += mx;
-
-                    if (!wall(e.x, e.y + my))
-                        e.y += my;
-                }
-
-                if (dist < 1.4f &&
-                    clearShot(e)) {
-
-                    long now =
-                        System.currentTimeMillis();
-
-                    if (now - e.lastAttack > 700) {
-
-                        hp -=
-                            e.type == 0
-                                ? 7
-                                : 11;
-
-                        e.lastAttack = now;
-
-                        if (hp <= 0)
-                            gameOver = true;
+                        Toast.makeText(
+                                this,
+                                "Need 300 coins!",
+                                Toast.LENGTH_SHORT
+                        ).show();
                     }
                 }
-            }
+        );
+
+        Button back =
+                new Button(this);
+
+        back.setText("BACK");
+        back.setTextSize(25);
+
+        root.addView(
+                back,
+                new LinearLayout.LayoutParams(
+                        -1, 100
+                )
+        );
+
+        back.setOnClickListener(
+                v -> showMenu()
+        );
+
+        setContentView(root);
+    }
+
+    void updateAmmo() {
+
+        ammoText.setText(
+                "Ammo: " + ammo
+        );
+    }
+
+    // =========================
+    // ORANGE STICKMAN
+    // =========================
+
+    class StickmanView extends View {
+
+        Paint paint =
+                new Paint(
+                        Paint.ANTI_ALIAS_FLAG
+                );
+
+        boolean jumping = false;
+
+        float jumpOffset = 0;
+
+        StickmanView(Context context) {
+
+            super(context);
+
+            paint.setStrokeCap(
+                    Paint.Cap.ROUND
+            );
         }
 
-        float normalize(float a) {
+        void jump() {
 
-            while (a > Math.PI)
-                a -= Math.PI * 2;
+            if (jumping)
+                return;
 
-            while (a < -Math.PI)
-                a += Math.PI * 2;
+            jumping = true;
 
-            return a;
+            ValueAnimator animator =
+                    ValueAnimator.ofFloat(
+                            0, 1, 0
+                    );
+
+            animator.setDuration(650);
+
+            animator.setInterpolator(
+                    new DecelerateInterpolator()
+            );
+
+            animator.addUpdateListener(
+                    animation -> {
+
+                        float t =
+                                (float)
+                                animation
+                                .getAnimatedValue();
+
+                        jumpOffset =
+                                (float)
+                                (
+                                    Math.sin(
+                                        t * Math.PI
+                                    ) * 130
+                                );
+
+                        invalidate();
+                    }
+            );
+
+            animator.addListener(
+                    new AnimatorListenerAdapter() {
+
+                        @Override
+                        public void onAnimationEnd(
+                                Animator animation) {
+
+                            jumpOffset = 0;
+
+                            jumping = false;
+
+                            invalidate();
+                        }
+                    }
+            );
+
+            animator.start();
         }
-
-        // =========================================================
-        // MULTI-TOUCH
-        // =========================================================
 
         @Override
-        public boolean onTouchEvent(MotionEvent e) {
+        protected void onDraw(
+                Canvas canvas) {
 
-            int action =
-                e.getActionMasked();
+            super.onDraw(canvas);
 
-            int index =
-                e.getActionIndex();
+            float x =
+                    getWidth() / 2f;
 
-            int id =
-                e.getPointerId(index);
+            float y =
+                    getHeight() / 2f
+                    - jumpOffset;
 
-            if (action ==
-                MotionEvent.ACTION_DOWN ||
-                action ==
-                MotionEvent.ACTION_POINTER_DOWN) {
+            paint.setColor(
+                    Color.rgb(
+                            255, 140, 0
+                    )
+            );
 
-                checkPointer(
-                    e.getX(index),
-                    e.getY(index),
-                    id
+            paint.setStyle(
+                    Paint.Style.STROKE
+            );
+
+            paint.setStrokeWidth(12);
+
+            // HEAD
+
+            canvas.drawCircle(
+                    x,
+                    y - 90,
+                    35,
+                    paint
+            );
+
+            // BODY
+
+            canvas.drawLine(
+                    x,
+                    y - 55,
+                    x,
+                    y + 45,
+                    paint
+            );
+
+            // ARMS
+
+            canvas.drawLine(
+                    x,
+                    y - 30,
+                    x - 70,
+                    y + 10,
+                    paint
+            );
+
+            canvas.drawLine(
+                    x,
+                    y - 30,
+                    x + 70,
+                    y + 10,
+                    paint
+            );
+
+            // LEGS
+
+            canvas.drawLine(
+                    x,
+                    y + 45,
+                    x - 55,
+                    y + 110,
+                    paint
+            );
+
+            canvas.drawLine(
+                    x,
+                    y + 45,
+                    x + 55,
+                    y + 110,
+                    paint
+            );
+        }
+    }
+
+    // =========================
+    // DUMMY VIEW
+    // =========================
+
+    class DummyView extends View {
+
+        Paint paint =
+                new Paint(
+                        Paint.ANTI_ALIAS_FLAG
                 );
-            }
 
-            if (action ==
-                MotionEvent.ACTION_UP ||
-                action ==
-                MotionEvent.ACTION_POINTER_UP ||
-                action ==
-                MotionEvent.ACTION_CANCEL) {
-
-                moveFingers.remove(id);
-                fireFingers.remove(id);
-                turnLFingers.remove(id);
-                turnRFingers.remove(id);
-                jumpFingers.remove(id);
-            }
-
-            if (action ==
-                MotionEvent.ACTION_MOVE) {
-
-                // Re-check every finger.
-                moveFingers.clear();
-                fireFingers.clear();
-                turnLFingers.clear();
-                turnRFingers.clear();
-                jumpFingers.clear();
-
-                for (int i = 0;
-                     i < e.getPointerCount();
-                     i++) {
-
-                    checkPointer(
-                        e.getX(i),
-                        e.getY(i),
-                        e.getPointerId(i)
-                    );
-                }
-            }
-
-            return true;
+        DummyView(Context context) {
+            super(context);
         }
 
-        void checkPointer(
-            float x,
-            float y,
-            int id) {
+        @Override
+        protected void onDraw(
+                Canvas canvas) {
 
-            int w = getWidth();
-            int h = getHeight();
+            float x =
+                    getWidth() / 2f;
 
-            float s = Math.max(
-                105,
-                Math.min(150, w * .14f)
+            paint.setColor(
+                    Color.rgb(
+                            120, 120, 120
+                    )
             );
 
-            float bottom = h - 25;
-            float gap = 18;
+            paint.setStrokeWidth(15);
 
-            // left
+            // HEAD
 
-            if (x >= 15 &&
-                x <= 35 + s &&
-                y >= bottom - s) {
-
-                moveFingers.add(id);
-            }
-
-            // right
-
-            if (x >= 20 + s &&
-                x <= 55 + s * 2 &&
-                y >= bottom - s) {
-
-                turnRFingers.add(id);
-            }
-
-            // jump
-
-            if (x >= w - s - 35 &&
-                x <= w - 10 &&
-                y >= bottom -
-                    s * 2 -
-                    gap &&
-                y <= bottom -
-                    s -
-                    gap) {
-
-                jumpFingers.add(id);
-            }
-
-            // fire
-
-            if (x >= w - s - 35 &&
-                x <= w - 10 &&
-                y >= bottom - s) {
-
-                fireFingers.add(id);
-            }
-
-            // turn
-
-            if (x >= w -
-                    s * 2 -
-                    gap -
-                    35 &&
-                x <= w -
-                    s -
-                    gap -
-                    15 &&
-                y >= bottom - s) {
-
-                turnRFingers.add(id);
-            }
-        }
-
-        // =========================================================
-        // END
-        // =========================================================
-
-        void drawEnd(
-            Canvas c,
-            int w,
-            int h,
-            boolean win) {
-
-            c.drawColor(Color.BLACK);
-
-            p.setColor(
-                win
-                    ? Color.YELLOW
-                    : Color.RED
+            canvas.drawCircle(
+                    x, 55, 35, paint
             );
 
-            p.setTextSize(48);
+            // BODY
 
-            String text =
-                win
-                    ? "LEVEL CLEARED"
-                    : "GAME OVER";
-
-            c.drawText(
-                text,
-                w / 2 -
-                    p.measureText(text) / 2,
-                h / 2,
-                p
+            canvas.drawRect(
+                    x - 45,
+                    90,
+                    x + 45,
+                    190,
+                    paint
             );
 
-            p.setColor(Color.WHITE);
-            p.setTextSize(22);
+            // LEGS
 
-            String score =
-                "KILLS: " + kills;
+            canvas.drawLine(
+                    x - 20,
+                    190,
+                    x - 55,
+                    245,
+                    paint
+            );
 
-            c.drawText(
-                score,
-                w / 2 -
-                    p.measureText(score) / 2,
-                h / 2 + 50,
-                p
+            canvas.drawLine(
+                    x + 20,
+                    190,
+                    x + 55,
+                    245,
+                    paint
             );
         }
+    }
 
-        static class Enemy {
+    // =========================
+    // LAMP
+    // =========================
 
-            float x;
-            float y;
+    class LampView extends View {
 
-            int type;
-            int hp;
+        Paint paint =
+                new Paint(
+                        Paint.ANTI_ALIAS_FLAG
+                );
 
-            boolean dead = false;
+        LampView(Context context) {
+            super(context);
+        }
 
-            long lastAttack = 0;
+        @Override
+        protected void onDraw(
+                Canvas canvas) {
+
+            float x =
+                    getWidth() / 2f;
+
+            // POLE
+
+            paint.setColor(
+                    Color.DKGRAY
+            );
+
+            paint.setStrokeWidth(12);
+
+            canvas.drawLine(
+                    x,
+                    20,
+                    x,
+                    getHeight() - 20,
+                    paint
+            );
+
+            // ARM
+
+            canvas.drawLine(
+                    x,
+                    20,
+                    x + 100,
+                    20,
+                    paint
+            );
+
+            // GLOW
+
+            paint.setColor(
+                    Color.rgb(
+                            255, 245, 190
+                    )
+            );
+
+            canvas.drawCircle(
+                    x + 100,
+                    75,
+                    70,
+                    paint
+            );
+
+            // BULB
+
+            paint.setColor(
+                    Color.rgb(
+                            255, 220, 80
+                    )
+            );
+
+            canvas.drawCircle(
+                    x + 100,
+                    35,
+                    30,
+                    paint
+            );
         }
     }
 }
