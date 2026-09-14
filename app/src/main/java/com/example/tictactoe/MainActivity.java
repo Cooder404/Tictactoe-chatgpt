@@ -9,90 +9,139 @@ import java.util.*;
 
 public class MainActivity extends Activity {
 
-    SurvivalView game;
-
     @Override
-    public void onCreate(Bundle b) {
+    protected void onCreate(Bundle b) {
         super.onCreate(b);
-        game = new SurvivalView(this);
-        setContentView(game);
+        setContentView(new SurvivalGame(this));
     }
 
-    public static class SurvivalView extends View {
+    public static class SurvivalGame extends View {
 
         Paint p = new Paint();
         Random random = new Random();
 
-        float px = 300, py = 300;
-        float vx = 0, vy = 0;
+        float playerX = 500;
+        float playerY = 300;
+        float velocityX = 0;
+        float velocityY = 0;
 
-        boolean left, right, jump, mine, craft, use;
-        boolean grounded = false;
+        boolean left, right, jumping;
+        boolean attacking;
 
         int health = 100;
         int hunger = 100;
+
         int wood = 0;
         int stone = 0;
-        int food = 2;
+        int coal = 0;
+        int iron = 0;
+        int food = 3;
+
+        boolean grounded = false;
 
         float cameraX = 0;
-        float cameraY = 0;
 
-        long startTime;
+        long gameTime = 0;
 
         ArrayList<Tree> trees = new ArrayList<>();
         ArrayList<Rock> rocks = new ArrayList<>();
         ArrayList<Enemy> enemies = new ArrayList<>();
+        ArrayList<Block> blocks = new ArrayList<>();
 
-        public SurvivalView(Context c) {
-            super(c);
+        public SurvivalGame(Context context) {
+            super(context);
+
             p.setAntiAlias(false);
-            startTime = System.currentTimeMillis();
 
-            for (int i = 0; i < 35; i++) {
-                trees.add(new Tree(
-                        150 + random.nextInt(5000),
-                        300 + random.nextInt(80)
-                ));
+            generateWorld();
+        }
+
+        void generateWorld() {
+
+            // Trees
+            for (int i = 0; i < 80; i++) {
+
+                float x = 200 + random.nextInt(12000);
+
+                trees.add(
+                        new Tree(
+                                x,
+                                330
+                        )
+                );
             }
 
+            // Rocks
+            for (int i = 0; i < 70; i++) {
+
+                float x = 300 + random.nextInt(12000);
+
+                rocks.add(
+                        new Rock(
+                                x,
+                                350
+                        )
+                );
+            }
+
+            // Enemies
             for (int i = 0; i < 30; i++) {
-                rocks.add(new Rock(
-                        200 + random.nextInt(5000),
-                        350
-                ));
+
+                float x = 800 + random.nextInt(11000);
+
+                enemies.add(
+                        new Enemy(
+                                x,
+                                330
+                        )
+                );
             }
 
-            for (int i = 0; i < 10; i++) {
-                enemies.add(new Enemy(
-                        500 + random.nextInt(4000),
-                        330
-                ));
+            // underground blocks
+            for (int x = 0; x < 13000; x += 40) {
+
+                for (int y = 390; y < 800; y += 40) {
+
+                    blocks.add(
+                            new Block(
+                                    x,
+                                    y,
+                                    random.nextInt(100)
+                            )
+                    );
+                }
             }
         }
 
         @Override
-        protected void onDraw(Canvas c) {
-            super.onDraw(c);
+        protected void onDraw(Canvas canvas) {
 
-            int w = getWidth();
-            int h = getHeight();
+            int width = getWidth();
+            int height = getHeight();
 
-            drawSky(c, w, h);
+            gameTime++;
 
-            cameraX = px - w / 2f;
-            if (cameraX < 0) cameraX = 0;
+            drawSky(canvas, width, height);
 
-            c.save();
-            c.translate(-cameraX, 0);
+            cameraX = playerX - width * 0.5f;
 
-            drawWorld(c, h);
-            drawPlayer(c);
-            drawEnemies(c);
+            if (cameraX < 0)
+                cameraX = 0;
 
-            c.restore();
+            canvas.save();
 
-            drawUI(c, w, h);
+            canvas.translate(-cameraX, 0);
+
+            drawTerrain(canvas);
+            drawBlocks(canvas);
+            drawTrees(canvas);
+            drawRocks(canvas);
+            drawEnemies(canvas);
+            drawPlayer(canvas);
+
+            canvas.restore();
+
+            drawInterface(canvas, width, height);
 
             updateGame();
 
@@ -100,310 +149,804 @@ public class MainActivity extends Activity {
         }
 
         void drawSky(Canvas c, int w, int h) {
-            long seconds = (System.currentTimeMillis() - startTime) / 1000;
-            int cycle = (int)(seconds % 120);
 
-            if (cycle < 80)
-                c.drawColor(Color.rgb(100, 190, 245));
-            else
-                c.drawColor(Color.rgb(25, 35, 70));
+            int cycle = (int)((gameTime / 5) % 240);
+
+            if (cycle < 120) {
+
+                p.setColor(Color.rgb(
+                        90,
+                        180,
+                        240
+                ));
+
+            } else {
+
+                p.setColor(Color.rgb(
+                        20,
+                        30,
+                        65
+                ));
+            }
+
+            c.drawRect(0, 0, w, h, p);
+
+            // sun/moon
+
+            if (cycle < 120) {
+
+                p.setColor(Color.YELLOW);
+
+                c.drawCircle(
+                        w - 100,
+                        90,
+                        40,
+                        p
+                );
+
+            } else {
+
+                p.setColor(Color.WHITE);
+
+                c.drawCircle(
+                        w - 100,
+                        90,
+                        30,
+                        p
+                );
+            }
+
+            // clouds
 
             p.setColor(Color.WHITE);
 
-            if (cycle >= 80) {
-                c.drawCircle(80, 80, 30, p);
-            } else {
-                p.setColor(Color.YELLOW);
-                c.drawCircle(w - 80, 80, 35, p);
+            for (int i = 0; i < 8; i++) {
+
+                float x =
+                        (i * 250 + gameTime * 0.2f)
+                                % (w + 300);
+
+                c.drawCircle(
+                        x,
+                        130 + i % 3 * 35,
+                        25,
+                        p
+                );
+
+                c.drawCircle(
+                        x + 25,
+                        130 + i % 3 * 35,
+                        30,
+                        p
+                );
             }
         }
 
-        void drawWorld(Canvas c, int h) {
-
-            // ground
-            p.setColor(Color.rgb(110, 75, 45));
-            c.drawRect(0, 370, 6000, 1000, p);
+        void drawTerrain(Canvas c) {
 
             // grass
-            p.setColor(Color.rgb(55, 170, 65));
-            c.drawRect(0, 350, 6000, 370, p);
+
+            p.setColor(Color.rgb(
+                    55,
+                    170,
+                    60
+            ));
+
+            c.drawRect(
+                    0,
+                    350,
+                    13000,
+                    390,
+                    p
+            );
+
+            // dirt
+
+            p.setColor(Color.rgb(
+                    120,
+                    80,
+                    45
+            ));
+
+            c.drawRect(
+                    0,
+                    390,
+                    13000,
+                    900,
+                    p
+            );
 
             // water
-            p.setColor(Color.rgb(45, 150, 210));
-            c.drawRect(1200, 350, 1900, 450, p);
 
-            // trees
-            for (Tree t : trees) {
-                p.setColor(Color.rgb(100, 55, 25));
-                c.drawRect(t.x - 10, 275, t.x + 10, 355, p);
+            p.setColor(Color.rgb(
+                    40,
+                    150,
+                    220
+            ));
 
-                p.setColor(Color.rgb(35, 130, 45));
-                c.drawCircle(t.x, 255, 38, p);
-                c.drawCircle(t.x - 28, 270, 30, p);
-                c.drawCircle(t.x + 28, 270, 30, p);
-            }
+            c.drawRect(
+                    1800,
+                    350,
+                    2600,
+                    450,
+                    p
+            );
 
-            // rocks
-            for (Rock r : rocks) {
-                p.setColor(Color.GRAY);
-                c.drawCircle(r.x, r.y, 20, p);
-            }
+            // grass details
 
-            // ground blocks
-            p.setColor(Color.rgb(80, 50, 30));
+            p.setColor(Color.rgb(
+                    30,
+                    120,
+                    40
+            ));
 
-            for (int x = 0; x < 6000; x += 40) {
-                c.drawRect(x, 370, x + 38, 408, p);
+            for (int x = 0; x < 13000; x += 35) {
+
+                c.drawRect(
+                        x,
+                        345,
+                        x + 5,
+                        355,
+                        p
+                );
             }
         }
 
-        void drawPlayer(Canvas c) {
+        void drawBlocks(Canvas c) {
 
-            // body
-            p.setColor(Color.rgb(40, 100, 220));
-            c.drawRect(px - 16, py - 45, px + 16, py, p);
+            for (Block b : blocks) {
 
-            // head
-            p.setColor(Color.rgb(245, 190, 140));
-            c.drawCircle(px, py - 62, 18, p);
+                if (b.x < cameraX - 100 ||
+                        b.x > cameraX + getWidth() + 100)
+                    continue;
 
-            // legs
-            p.setColor(Color.DKGRAY);
-            c.drawRect(px - 14, py, px - 3, py + 28, p);
-            c.drawRect(px + 3, py, px + 14, py + 28, p);
+                if (b.type < 65) {
+
+                    p.setColor(Color.rgb(
+                            105,
+                            70,
+                            40
+                    ));
+
+                } else if (b.type < 85) {
+
+                    p.setColor(Color.GRAY);
+
+                } else {
+
+                    p.setColor(Color.DKGRAY);
+                }
+
+                c.drawRect(
+                        b.x,
+                        b.y,
+                        b.x + 38,
+                        b.y + 38,
+                        p
+                );
+            }
+        }
+
+        void drawTrees(Canvas c) {
+
+            for (Tree t : trees) {
+
+                if (t.x < -500)
+                    continue;
+
+                p.setColor(Color.rgb(
+                        100,
+                        60,
+                        30
+                ));
+
+                c.drawRect(
+                        t.x - 12,
+                        275,
+                        t.x + 12,
+                        350,
+                        p
+                );
+
+                p.setColor(Color.rgb(
+                        30,
+                        135,
+                        45
+                ));
+
+                c.drawCircle(
+                        t.x,
+                        245,
+                        42,
+                        p
+                );
+
+                c.drawCircle(
+                        t.x - 30,
+                        265,
+                        30,
+                        p
+                );
+
+                c.drawCircle(
+                        t.x + 30,
+                        265,
+                        30,
+                        p
+                );
+            }
+        }
+
+        void drawRocks(Canvas c) {
+
+            for (Rock r : rocks) {
+
+                if (r.x < -500)
+                    continue;
+
+                p.setColor(Color.GRAY);
+
+                c.drawCircle(
+                        r.x,
+                        r.y,
+                        22,
+                        p
+                );
+
+                p.setColor(Color.LTGRAY);
+
+                c.drawCircle(
+                        r.x - 7,
+                        r.y - 7,
+                        5,
+                        p
+                );
+            }
         }
 
         void drawEnemies(Canvas c) {
 
             for (Enemy e : enemies) {
 
-                p.setColor(Color.rgb(80, 200, 80));
+                if (Math.abs(e.x - playerX) > 700)
+                    continue;
 
-                c.drawCircle(e.x, e.y, 22, p);
+                p.setColor(Color.rgb(
+                        80,
+                        210,
+                        80
+                ));
+
+                c.drawCircle(
+                        e.x,
+                        e.y,
+                        24,
+                        p
+                );
 
                 p.setColor(Color.BLACK);
 
-                c.drawCircle(e.x - 7, e.y - 5, 3, p);
-                c.drawCircle(e.x + 7, e.y - 5, 3, p);
+                c.drawCircle(
+                        e.x - 8,
+                        e.y - 6,
+                        4,
+                        p
+                );
+
+                c.drawCircle(
+                        e.x + 8,
+                        e.y - 6,
+                        4,
+                        p
+                );
+            }
+        }
+
+        void drawPlayer(Canvas c) {
+
+            // legs
+
+            p.setColor(Color.DKGRAY);
+
+            c.drawRect(
+                    playerX - 15,
+                    playerY,
+                    playerX - 3,
+                    playerY + 30,
+                    p
+            );
+
+            c.drawRect(
+                    playerX + 3,
+                    playerY,
+                    playerX + 15,
+                    playerY + 30,
+                    p
+            );
+
+            // body
+
+            p.setColor(Color.rgb(
+                    40,
+                    100,
+                    220
+            ));
+
+            c.drawRect(
+                    playerX - 18,
+                    playerY - 45,
+                    playerX + 18,
+                    playerY,
+                    p
+            );
+
+            // head
+
+            p.setColor(Color.rgb(
+                    245,
+                    190,
+                    140
+            ));
+
+            c.drawCircle(
+                    playerX,
+                    playerY - 62,
+                    20,
+                    p
+            );
+
+            // weapon
+
+            if (attacking) {
+
+                p.setColor(Color.LTGRAY);
+
+                c.drawRect(
+                        playerX + 15,
+                        playerY - 35,
+                        playerX + 65,
+                        playerY - 28,
+                        p
+                );
             }
         }
 
         void updateGame() {
 
             // movement
-            if (left)
-                vx = -4;
-            else if (right)
-                vx = 4;
-            else
-                vx *= 0.8f;
 
-            px += vx;
+            if (left)
+                velocityX = -5;
+
+            else if (right)
+                velocityX = 5;
+
+            else
+                velocityX *= 0.75f;
+
+            playerX += velocityX;
 
             // gravity
-            vy += 0.7f;
-            py += vy;
 
-            if (py >= 350) {
-                py = 350;
-                vy = 0;
+            velocityY += 0.65f;
+
+            playerY += velocityY;
+
+            if (playerY >= 350) {
+
+                playerY = 350;
+                velocityY = 0;
+
                 grounded = true;
             }
 
-            if (jump && grounded) {
-                vy = -12;
+            if (jumping && grounded) {
+
+                velocityY = -13;
+
                 grounded = false;
             }
 
-            if (px < 20)
-                px = 20;
+            // attack
 
-            // mining
-            if (mine) {
-                mineNearby();
-                mine = false;
+            if (attacking) {
+
+                attackEnemies();
+
+                attacking = false;
             }
 
-            // crafting
-            if (craft) {
-                if (wood >= 3 && stone >= 2) {
-                    wood -= 3;
-                    stone -= 2;
-                    food++;
+            // enemies
+
+            for (Enemy e : enemies) {
+
+                if (e.x < -500)
+                    continue;
+
+                if (Math.abs(e.x - playerX) < 600) {
+
+                    if (e.x < playerX)
+                        e.x += 1.2f;
+                    else
+                        e.x -= 1.2f;
+
+                    if (Math.abs(e.x - playerX) < 45) {
+
+                        if (gameTime % 60 == 0)
+                            health -= 5;
+                    }
                 }
-                craft = false;
-            }
-
-            // eat
-            if (use) {
-                if (food > 0 && hunger < 100) {
-                    food--;
-                    hunger += 30;
-
-                    if (hunger > 100)
-                        hunger = 100;
-                }
-
-                use = false;
             }
 
             // hunger
-            if (System.currentTimeMillis() % 4000 < 20) {
+
+            if (gameTime % 300 == 0) {
+
                 hunger--;
 
                 if (hunger < 0)
                     hunger = 0;
             }
 
-            if (hunger == 0 && System.currentTimeMillis() % 1000 < 20) {
-                health--;
+            if (hunger == 0 &&
+                    gameTime % 60 == 0) {
 
-                if (health <= 0) {
-                    health = 100;
-                    hunger = 100;
-                    px = 300;
-                    wood = 0;
-                    stone = 0;
-                }
+                health--;
             }
 
-            // enemies follow player
+            // respawn
+
+            if (health <= 0) {
+
+                health = 100;
+                hunger = 100;
+
+                playerX = 500;
+                playerY = 300;
+            }
+        }
+
+        void attackEnemies() {
+
             for (Enemy e : enemies) {
 
-                if (Math.abs(e.x - px) < 500) {
+                if (Math.abs(e.x - playerX) < 100) {
 
-                    if (e.x < px)
-                        e.x += 1.1f;
-                    else
-                        e.x -= 1.1f;
-
-                    if (Math.abs(e.x - px) < 35) {
-                        if (System.currentTimeMillis() % 1000 < 20)
-                            health -= 5;
-                    }
+                    e.x = -1000;
                 }
             }
         }
 
-        void mineNearby() {
+        void mine() {
 
             for (Tree t : trees) {
 
-                if (Math.abs(t.x - px) < 70) {
-                    wood += 2;
+                if (Math.abs(t.x - playerX) < 80) {
+
+                    wood += 3;
                     t.x = -1000;
+
                     return;
                 }
             }
 
             for (Rock r : rocks) {
 
-                if (Math.abs(r.x - px) < 70) {
+                if (Math.abs(r.x - playerX) < 80) {
+
                     stone += 2;
+
                     r.x = -1000;
+
                     return;
                 }
             }
         }
 
-        void drawUI(Canvas c, int w, int h) {
+        void eat() {
 
-            p.setColor(Color.argb(190, 0, 0, 0));
-            c.drawRect(10, 10, 250, 105, p);
+            if (food > 0 &&
+                    hunger < 100) {
 
-            p.setColor(Color.WHITE);
-            p.setTextSize(18);
+                food--;
 
-            c.drawText("HP: " + health, 20, 35, p);
-            c.drawText("Hunger: " + hunger, 20, 58, p);
-            c.drawText("Wood: " + wood + "  Stone: " + stone, 20, 81, p);
-            c.drawText("Food: " + food, 20, 101, p);
+                hunger += 30;
 
-            // controls
-
-            button(c, 25, h - 100, 85, h - 30, "LEFT");
-            button(c, 95, h - 100, 155, h - 30, "RIGHT");
-
-            button(c, w - 160, h - 150, w - 80, h - 80, "JUMP");
-            button(c, w - 160, h - 75, w - 80, h - 5, "MINE");
-
-            button(c, w - 75, h - 150, w - 5, h - 80, "USE");
-            button(c, w - 75, h - 75, w - 5, h - 5, "CRAFT");
+                if (hunger > 100)
+                    hunger = 100;
+            }
         }
 
-        void button(Canvas c, float x1, float y1,
-                    float x2, float y2, String text) {
+        void craft() {
 
-            p.setColor(Color.argb(170, 40, 40, 40));
-            c.drawRoundRect(x1, y1, x2, y2, 15, 15, p);
+            if (wood >= 4 &&
+                    stone >= 2) {
+
+                wood -= 4;
+                stone -= 2;
+
+                food++;
+            }
+        }
+
+        void drawInterface(
+                Canvas c,
+                int w,
+                int h) {
+
+            // stats panel
+
+            p.setColor(Color.argb(
+                    190,
+                    0,
+                    0,
+                    0
+            ));
+
+            c.drawRoundRect(
+                    15,
+                    15,
+                    330,
+                    135,
+                    15,
+                    15,
+                    p
+            );
 
             p.setColor(Color.WHITE);
-            p.setTextSize(13);
+            p.setTextSize(20);
+
+            c.drawText(
+                    "HP: " + health,
+                    30,
+                    42,
+                    p
+            );
+
+            c.drawText(
+                    "Hunger: " + hunger,
+                    30,
+                    68,
+                    p
+            );
+
+            c.drawText(
+                    "Wood: " + wood,
+                    30,
+                    94,
+                    p
+            );
+
+            c.drawText(
+                    "Stone: " + stone +
+                            "  Food: " + food,
+                    30,
+                    120,
+                    p
+            );
+
+            // BIG TABLET CONTROLS
+
+            float size = Math.min(
+                    110,
+                    Math.max(80, w * 0.10f)
+            );
+
+            float gap = 18;
+
+            float bottom = h - 25;
+
+            // left
+
+            drawButton(
+                    c,
+                    25,
+                    bottom - size,
+                    size,
+                    "◀"
+            );
+
+            // right
+
+            drawButton(
+                    c,
+                    25 + size + gap,
+                    bottom - size,
+                    size,
+                    "▶"
+            );
+
+            // jump
+
+            drawButton(
+                    c,
+                    w - size - 25,
+                    bottom - size * 2 - gap,
+                    size,
+                    "JUMP"
+            );
+
+            // attack/mine
+
+            drawButton(
+                    c,
+                    w - size - 25,
+                    bottom - size,
+                    size,
+                    "MINE"
+            );
+
+            // use
+
+            drawButton(
+                    c,
+                    w - size * 2 - gap - 25,
+                    bottom - size,
+                    size,
+                    "USE"
+            );
+
+            // craft
+
+            drawButton(
+                    c,
+                    w - size * 2 - gap - 25,
+                    bottom - size * 2 - gap,
+                    size,
+                    "CRAFT"
+            );
+        }
+
+        void drawButton(
+                Canvas c,
+                float x,
+                float y,
+                float size,
+                String text) {
+
+            p.setColor(Color.argb(
+                    185,
+                    35,
+                    35,
+                    35
+            ));
+
+            c.drawRoundRect(
+                    x,
+                    y,
+                    x + size,
+                    y + size,
+                    25,
+                    25,
+                    p
+            );
+
+            p.setColor(Color.WHITE);
+
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(3);
+
+            c.drawRoundRect(
+                    x,
+                    y,
+                    x + size,
+                    y + size,
+                    25,
+                    25,
+                    p
+            );
+
+            p.setStyle(Paint.Style.FILL);
+
+            p.setTextSize(
+                    text.length() <= 2
+                            ? size * 0.42f
+                            : size * 0.18f
+            );
 
             float tw = p.measureText(text);
 
             c.drawText(
                     text,
-                    (x1 + x2 - tw) / 2,
-                    (y1 + y2) / 2 + 5,
+                    x + (size - tw) / 2,
+                    y + size * 0.60f,
                     p
             );
         }
 
         @Override
-        public boolean onTouchEvent(android.view.MotionEvent e) {
+        public boolean onTouchEvent(MotionEvent event) {
 
-            float x = e.getX();
-            float y = e.getY();
+            float x = event.getX();
+            float y = event.getY();
 
-            int action = e.getActionMasked();
+            int action = event.getActionMasked();
+
+            int w = getWidth();
+            int h = getHeight();
+
+            float size = Math.min(
+                    110,
+                    Math.max(80, w * 0.10f)
+            );
+
+            float bottom = h - 25;
+            float gap = 18;
 
             if (action == MotionEvent.ACTION_DOWN ||
-                action == MotionEvent.ACTION_MOVE) {
+                    action == MotionEvent.ACTION_MOVE) {
 
                 left = false;
                 right = false;
-                jump = false;
+                jumping = false;
 
-                int h = getHeight();
-                int w = getWidth();
+                // LEFT
 
-                if (x >= 25 && x <= 85 && y >= h - 100)
+                if (x >= 25 &&
+                        x <= 25 + size &&
+                        y >= bottom - size)
                     left = true;
 
-                if (x >= 95 && x <= 155 && y >= h - 100)
+                // RIGHT
+
+                if (x >= 25 + size + gap &&
+                        x <= 25 + size * 2 + gap &&
+                        y >= bottom - size)
                     right = true;
 
-                if (x >= w - 160 && x <= w - 80 &&
-                    y >= h - 150 && y <= h - 80)
-                    jump = true;
+                // JUMP
 
-                if (x >= w - 160 && x <= w - 80 &&
-                    y >= h - 75)
-                    mine = true;
+                if (x >= w - size - 25 &&
+                        x <= w - 25 &&
+                        y >= bottom - size * 2 - gap &&
+                        y <= bottom - size - gap)
+                    jumping = true;
 
-                if (x >= w - 75 && x <= w - 5 &&
-                    y >= h - 150 && y <= h - 80)
-                    use = true;
+                // MINE / ATTACK
 
-                if (x >= w - 75 && x <= w - 5 &&
-                    y >= h - 75)
-                    craft = true;
+                if (x >= w - size - 25 &&
+                        x <= w - 25 &&
+                        y >= bottom - size) {
+
+                    mine();
+                    attacking = true;
+                }
+
+                // USE FOOD
+
+                if (x >= w - size * 2 - gap - 25 &&
+                        x <= w - size - gap - 25 &&
+                        y >= bottom - size) {
+
+                    eat();
+                }
+
+                // CRAFT
+
+                if (x >= w - size * 2 - gap - 25 &&
+                        x <= w - size - gap - 25 &&
+                        y >= bottom - size * 2 - gap &&
+                        y <= bottom - size - gap) {
+
+                    craft();
+                }
             }
 
             if (action == MotionEvent.ACTION_UP ||
-                action == MotionEvent.ACTION_CANCEL) {
+                    action == MotionEvent.ACTION_CANCEL) {
 
                 left = false;
                 right = false;
-                jump = false;
+                jumping = false;
             }
 
             return true;
         }
 
         static class Tree {
-            float x, y;
+
+            float x;
+            float y;
 
             Tree(float x, float y) {
                 this.x = x;
@@ -412,7 +955,9 @@ public class MainActivity extends Activity {
         }
 
         static class Rock {
-            float x, y;
+
+            float x;
+            float y;
 
             Rock(float x, float y) {
                 this.x = x;
@@ -421,11 +966,30 @@ public class MainActivity extends Activity {
         }
 
         static class Enemy {
-            float x, y;
+
+            float x;
+            float y;
 
             Enemy(float x, float y) {
                 this.x = x;
                 this.y = y;
+            }
+        }
+
+        static class Block {
+
+            float x;
+            float y;
+            int type;
+
+            Block(
+                    float x,
+                    float y,
+                    int type) {
+
+                this.x = x;
+                this.y = y;
+                this.type = type;
             }
         }
     }
